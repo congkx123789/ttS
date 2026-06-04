@@ -3,7 +3,7 @@ import DataSync from './DataSync';
 
 export default function Library() {
   const [activeView, setActiveView] = useState('library'); // 'library', 'history', or 'sync'
-  const [serverUrl, setServerUrl] = useState('http://localhost:5051');
+  const [serverUrl, setServerUrl] = useState('https://api-tienhiep.lyvuha.com');
   const [novels, setNovels] = useState([]);
   const [historyGroups, setHistoryGroups] = useState([]);
   const [localHistory, setLocalHistory] = useState([]); // local history stored in chrome extension
@@ -24,7 +24,7 @@ export default function Library() {
       const listener = (changes, areaName) => {
         if (areaName === 'local') {
           if (changes.serverUrl) {
-            setServerUrl(changes.serverUrl.newValue || 'http://localhost:5051');
+            setServerUrl(changes.serverUrl.newValue || 'https://api-tienhiep.lyvuha.com');
           }
           if (changes.serverUser) {
             setUser(changes.serverUser.newValue || null);

@@ -503,7 +503,7 @@ async function getBackendHost(settings) {
     hosts.push("https://api.tienhiep.lyvuha.com");
     hosts.push("http://localhost:5050");
     hosts.push("https://tienhiep.lyvuha.com");
-    hosts.push("http://localhost:5051");
+    hosts.push("https://api-tienhiep.lyvuha.com");
     hosts.push("http://localhost:5000");
     
     for (const host of hosts) {
@@ -596,7 +596,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Read user session from storage to determine if online or offline
         chrome.storage.local.get(['serverUser', 'serverUrl'], (storageRes) => {
             const user = storageRes.serverUser;
-            const serverUrl = storageRes.serverUrl || "http://localhost:5051";
+            const serverUrl = storageRes.serverUrl || "https://api-tienhiep.lyvuha.com";
 
             if (user) {
                 // User is logged in -> Sync online (SQLite database)

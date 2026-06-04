@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const BACKEND_CANDIDATES = [
   'https://tienhiep.lyvuha.com',
-  'http://localhost:5051',
+  'https://api-tienhiep.lyvuha.com',
   'https://api.tienhiep.lyvuha.com',
   'http://localhost:5050',
 ];
@@ -14,7 +14,7 @@ export default function VipUpgradeModal({ show, onClose, onActivated }) {
   const [vipCodeInput, setVipCodeInput] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeHost, setActiveHost] = useState('http://localhost:5051');
+  const [activeHost, setActiveHost] = useState('https://api-tienhiep.lyvuha.com');
   const [paymentData, setPaymentData] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState('pending');
   const pollingRef = useRef(null);

@@ -94,7 +94,7 @@ function App() {
               return loadedSettings;
             });
           }
-          const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'http://localhost:5051';
+          const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
           syncVipStatus(host);
         });
       } else {
@@ -106,7 +106,7 @@ function App() {
             setSettings(loadedSettings);
           } catch (e) {}
         }
-        const host = (loadedSettings && loadedSettings.apiHost) || 'http://localhost:5051';
+        const host = (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
         syncVipStatus(host);
       }
     };

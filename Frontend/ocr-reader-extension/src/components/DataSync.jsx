@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
 export default function DataSync({ onSyncFinished }) {
-  const [serverUrl, setServerUrl] = useState('http://localhost:5051');
-  const [inputUrl, setInputUrl] = useState('http://localhost:5051');
+  const [serverUrl, setServerUrl] = useState('https://api-tienhiep.lyvuha.com');
+  const [inputUrl, setInputUrl] = useState('https://api-tienhiep.lyvuha.com');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -17,7 +17,7 @@ export default function DataSync({ onSyncFinished }) {
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['serverUrl', 'settings', 'serverUser'], (res) => {
-        const storedUrl = res.serverUrl || (res.settings && res.settings.apiHost) || 'http://localhost:5051';
+        const storedUrl = res.serverUrl || (res.settings && res.settings.apiHost) || 'https://api-tienhiep.lyvuha.com';
         setServerUrl(storedUrl);
         setInputUrl(storedUrl);
         if (res.serverUser) {
@@ -26,7 +26,7 @@ export default function DataSync({ onSyncFinished }) {
         setIsUrlLoaded(true);
       });
     } else {
-      const storedUrl = localStorage.getItem('serverUrl') || 'http://localhost:5051';
+      const storedUrl = localStorage.getItem('serverUrl') || 'https://api-tienhiep.lyvuha.com';
       setServerUrl(storedUrl);
       setInputUrl(storedUrl);
       setIsUrlLoaded(true);
@@ -231,7 +231,7 @@ export default function DataSync({ onSyncFinished }) {
                 type="text" 
                 value={inputUrl} 
                 onChange={(e) => setInputUrl(e.target.value)}
-                placeholder="Ví dụ: http://localhost:5051"
+                placeholder="Ví dụ: https://api-tienhiep.lyvuha.com"
               />
               <button 
                 onClick={handleSaveAndCheck}

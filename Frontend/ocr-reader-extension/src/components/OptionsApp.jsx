@@ -292,7 +292,7 @@ export default function OptionsApp() {
         if (result.offlineTranslationHistory) {
           setHistory(result.offlineTranslationHistory);
         }
-        const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'http://localhost:5051';
+        const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
         syncVipStatus(host);
       });
     } else {
@@ -309,7 +309,7 @@ export default function OptionsApp() {
         { title: 'Khai Cục Trưởng Sinh Vạn Cổ', url: 'https://faloo.com/1234.html', timestamp: Date.now() - 3600000 },
         { title: 'Hệ Thống Phú Ngã Trưởng Sinh', url: 'https://qidian.com/5678.html', timestamp: Date.now() - 7200000 }
       ]);
-      const host = (loadedSettings && loadedSettings.apiHost) || 'http://localhost:5051';
+      const host = (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
       syncVipStatus(host);
     }
   }, []);
@@ -575,7 +575,7 @@ export default function OptionsApp() {
                       type="text"
                       value={settings.apiHost}
                       onChange={(e) => updateSetting('apiHost', e.target.value)}
-                      placeholder="http://localhost:5051"
+                      placeholder="https://api-tienhiep.lyvuha.com"
                       className="flex-1 h-9 px-3 border border-gray-300 rounded-lg text-xs outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                     />
                     <button 
