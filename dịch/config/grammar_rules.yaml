@@ -1,0 +1,45 @@
+# Chinese to Vietnamese Grammar Structure Patterns
+# Used by the grammar matcher to recognize clauses, conjunctions, and sentence structures.
+
+rules:
+  - id: "concession_although"
+    name: "Cấu trúc Nhượng bộ (Tuy... Nhưng...)"
+    pattern_zh: ["虽然", "但是"] # Matches sentences containing both words
+    pattern_vi: "Tuy... nhưng..."
+    chinese_example: "Although Chinese is difficult, he persists in studying."
+    zh_sentence: "虽然中文很难，但是他坚持学习。"
+    vi_sentence: "Tuy tiếng Trung rất khó, nhưng anh ấy vẫn kiên trì học tập."
+    description: "Biểu thị quan hệ nhượng bộ giữa hai phân câu."
+
+  - id: "cause_effect"
+    name: "Cấu trúc Nhân quả (Vì... Nên...)"
+    pattern_zh: [" because", "so"]
+    pattern_zh_words: ["因为", "所以"]
+    pattern_vi: "Vì... nên..."
+    zh_sentence: "因为今天下雨，所以我们没去公园。"
+    vi_sentence: "Vì hôm nay trời mưa, nên chúng tôi không đi công viên."
+    description: "Biểu thị quan hệ nguyên nhân và kết quả."
+
+  - id: "progressive_not_only"
+    name: "Cấu trúc Tăng tiến (Không những... Mà còn...)"
+    pattern_zh_words: ["不仅", "而且"]
+    pattern_vi: "Không những... mà còn..."
+    zh_sentence: "他不仅会说汉语, 而且还会写汉字。"
+    vi_sentence: "Anh ấy không những biết nói tiếng Trung, mà còn biết viết chữ Hán."
+    description: "Phân câu sau biểu thị mức độ cao hơn phân câu trước."
+
+  - id: "condition_if"
+    name: "Cấu trúc Điều kiện (Nếu... Thì...)"
+    pattern_zh_words: ["如果", "就"]
+    pattern_vi: "Nếu... thì..."
+    zh_sentence: "如果明天天气好，我们就去爬山。"
+    vi_sentence: "Nếu ngày mai thời tiết tốt, chúng tôi sẽ đi leo núi."
+    description: "Giả thiết một điều kiện và kết quả đi kèm."
+
+  - id: "condition_only_if"
+    name: "Cấu trúc Điều kiện Cần (Chỉ cần... Là...)"
+    pattern_zh_words: ["只要", "就"]
+    pattern_vi: "Chỉ cần... là/sẽ..."
+    zh_sentence: "只要努力, 就一定能成功。"
+    vi_sentence: "Chỉ cần nỗ lực, nhất định sẽ thành công."
+    description: "Đưa ra điều kiện đầy đủ để đạt được kết quả."

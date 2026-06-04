@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: novel-backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+      - DB_MODE=advanced
+    volumes:
+      - ./merged_books_advanced.db:/app/merged_books_advanced.db
+      - ./merged_books_fast.db:/app/merged_books_fast.db
+      - ./merged_books_hanviet.db:/app/merged_books_hanviet.db
+      - ./users_data.db:/app/users_data.db
+      - ./quick_translator:/app/quick_translator
+    ports:
+      - "5050:5050"
+
+  nginx:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    volumes:
+      - ./nginx/data:/data
+      - ./nginx/letsencrypt:/etc/letsencrypt
+    depends_on:
+      - backend

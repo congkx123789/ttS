@@ -1,0 +1,13 @@
+# Core NLP for Chinese
+jieba>=0.42.1
+# hanlp>=2.1.0-alpha.0 # Optional: Full Chinese NLP pipeline (Deep Learning based)
+
+# Core NLP for Vietnamese
+underthesea>=6.8.0
+# vncorenlp>=1.0.3 # Optional: High accuracy Vietnamese NLP (requires Java JRE/JDK)
+# phonlp>=0.1.2 # Optional: PhoBERT-based Vietnamese NLP (requires PyTorch)
+
+# Utilities
+pyyaml>=6.0
+colorama>=0.4.6
+requests>=2.31.0

@@ -1,0 +1,47 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Google Cloud credentials
+gcp-key.json
+learned-acronym*.json
+
+# Data and Heavy files
+*.csv
+*.json
+!firebase.json
+!package.json
+!package-lock.json
+*.epub
+*.zip
+*.log
+*.png
+*.jpg
+*.txt
+!requirements.txt
+
+# Large Directories
+dictionaries/
+dictionaries_new/
+dictionaries_vietnamese/
+tts/
+v1/
+gui/
+Test dich/
+ocr_reader_extension_advanced/
+quick_translator/

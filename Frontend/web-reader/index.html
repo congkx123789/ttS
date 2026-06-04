@@ -1,0 +1,1768 @@
+"<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>📚 Kho Truyện Tổng Hợp — 944.432 đầu truyện</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#0f0f1a;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e3a5f 100%);padding:28px 32px;border-bottom:1px solid #2d2d6b}
+.header h1{font-size:1.7rem;font-weight:700;background:linear-gradient(90deg,#a5b4fc,#67e8f9,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .subtitle{color:#94a3b8;font-size:.9rem;margin-top:6px}
+.stats-bar{display:flex;gap:20px;margin-top:16px;flex-wrap:wrap}
+.stat{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 18px;font-size:.85rem}
+.stat strong{color:#a5b4fc;font-size:1.1rem;display:block}
+.controls{padding:20px 32px;background:#13131f;border-bottom:1px solid #1e1e3a;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.search-box{flex:1;min-width:260px;position:relative}
+.search-box input{width:100%;background:#1e1e3a;border:1.5px solid #2d2d6b;border-radius:10px;padding:11px 16px 11px 42px;color:#e2e8f0;font-size:.95rem;outline:none;transition:.2s}
+.search-box input:focus{border-color:#6366f1}
+.search-box .icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6366f1;font-size:1.1rem}
+select{background:#1e1e3a;border:1.5px solid #2d2d6b;border-radius:10px;padding:11px 16px;color:#e2e8f0;font-size:.9rem;outline:none;cursor:pointer}
+select:focus{border-color:#6366f1}
+.btn{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-size:.9rem;font-weight:600;cursor:pointer;transition:.2s}
+.btn:hover{opacity:.85;transform:translateY(-1px)}
+.btn-outline{background:transparent;border:1.5px solid #4f46e5;color:#a5b4fc}
+.main{padding:20px 32px}
+.results-info{color:#64748b;font-size:.85rem;margin-bottom:16px}
+.results-info strong{color:#94a3b8}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.card{background:#1a1a2e;border:1px solid #1e1e3a;border-radius:14px;padding:20px;transition:.2s;cursor:default}
+.card:hover{border-color:#4f46e5;transform:translateY(-2px);box-shadow:0 8px 32px rgba(99,102,241,.15)}
+.card-title{font-size:1.05rem;font-weight:600;color:#e2e8f0;margin-bottom:4px;line-height:1.4}
+.card-author{color:#7c3aed;font-size:.87rem;font-weight:500;margin-bottom:12px}
+.card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.badge{font-size:.75rem;padding:3px 10px;border-radius:20px;font-weight:500}
+.badge-site{background:rgba(99,102,241,.2);color:#a5b4fc;border:1px solid rgba(99,102,241,.3)}
+.badge-cat{background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.25)}
+.badge-dup{background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+.card-info{display:flex;gap:16px;font-size:.82rem;color:#64748b;margin-bottom:10px}
+.card-info span strong{color:#94a3b8}
+.card-desc{font-size:.82rem;color:#64748b;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-urls{margin-top:10px}
+.url-chip{display:inline-block;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:3px 10px;font-size:.75rem;color:#60a5fa;margin:2px 2px 0 0;text-decoration:none}
+.url-chip:hover{background:#1e293b;color:#93c5fd}
+.pagination{display:flex;gap:8px;justify-content:center;margin-top:28px;flex-wrap:wrap}
+.page-btn{background:#1e1e3a;border:1.5px solid #2d2d6b;color:#94a3b8;border-radius:8px;padding:8px 14px;font-size:.85rem;cursor:pointer;transition:.2s}
+.page-btn:hover,.page-btn.active{background:#4f46e5;border-color:#4f46e5;color:#fff}
+.page-btn:disabled{opacity:.3;cursor:not-allowed}
+.loading{text-align:center;padding:60px;color:#4f46e5;font-size:1.1rem}
+.empty{text-align:center;padding:60px;color:#475569}
+.empty .icon{font-size:3rem;margin-bottom:12px}
+.cover-img{width:50px;height:65px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid #2d2d6b}
+.card-top{display:flex;gap:14px;align-items:flex-start}
+.card-body{flex:1;min-width:0}
+@media(max-width:640px){.controls{padding:16px}.main{padding:12px}.grid{grid-template-columns:1fr}}
+.btn-compare:hover{background:rgba(99,102,241,0.2) !important;border-color:#4f46e5 !important}
+.compare-item{margin-bottom:8px}
+.compare-item:last-child{margin-bottom:0}
+.compare-label{font-weight:700;font-size:0.7rem;color:#818cf8;text-transform:uppercase}
+.compare-val{color:#e2e8f0;margin-top:2px}
+.auth-widget{display:flex;align-items:center;gap:12px}
+.tab-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 16px;color:#94a3b8;font-size:.9rem;font-weight:600;cursor:pointer;transition:.2s}
+.tab-btn:hover,.tab-btn.active{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.6);backdrop-filter:blur(5px);justify-content:center;align-items:center}
+.btn-fav{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);color:#fbbf24;border-radius:6px;padding:6.5px 10px;font-size:.75rem;cursor:pointer;width:100%;text-align:center;font-weight:500;transition:.2s;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-fav:hover{background:rgba(251,191,36,.2);border-color:#fbbf24}
+.btn-fav.active{background:#fbbf24;color:#0f0f1a;border-color:#fbbf24}
+.history-section{margin-bottom:24px}
+.history-title{font-size:1.1rem;font-weight:700;color:#a5b4fc;margin-bottom:12px;border-left:4px solid #6366f1;padding-left:10px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:12px 28px;border-radius:12px;font-size:.9rem;font-weight:500;z-index:9999;opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);box-shadow:0 8px 32px rgba(99,102,241,.4);pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:linear-gradient(135deg,#ef4444,#dc2626)}
+.toast.success{background:linear-gradient(135deg,#10b981,#059669)}
+.confirm-modal{display:none;position:fixed;z-index:1001;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,.6);backdrop-filter:blur(5px);justify-content:center;align-items:center}
+.confirm-modal.show{display:flex}
+.confirm-box{background:#131324;border:1px solid #2d2d6b;padding:24px;border-radius:16px;width:380px;box-shadow:0 10px 25px rgba(0,0,0,.5);text-align:center}
+.confirm-box h3{color:#fff;font-size:1.1rem;margin-bottom:8px}
+.confirm-box p{color:#94a3b8;font-size:.85rem;margin-bottom:20px;line-height:1.5}
+.confirm-box .actions{display:flex;gap:10px;justify-content:center}
+.confirm-box .btn-cancel{background:transparent;border:1.5px solid #4f46e5;color:#a5b4fc;border-radius:10px;padding:8px 20px;font-size:.85rem;font-weight:600;cursor:pointer}
+.confirm-box .btn-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-size:.85rem;font-weight:600;cursor:pointer}
+.search-field-select{min-width:140px}
+.active-filters{display:flex;gap:8px;flex-wrap:wrap;padding:0 32px;margin-bottom:4px}
+.active-filter-tag{background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:4px 12px;font-size:.75rem;display:flex;align-items:center;gap:6px;cursor:pointer;transition:.2s}
+.active-filter-tag:hover{background:rgba(239,68,68,.2);color:#fca5a5;border-color:rgba(239,68,68,.3)}
+.active-filter-tag .remove{font-weight:700;font-size:.85rem}
+.lang-selector{display:flex;gap:6px;align-items:center}
+.lang-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:5px 10px;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer;transition:.2s}
+.lang-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+.lang-btn.active{background:#6366f1;color:#fff;border-color:#6366f1}
+</style>
+</head>
+<body>
+<div class="header">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <h1 id="titleHeader">📚 Kho Truyện Tổng Hợp</h1>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div class="lang-selector">
+        <button class="lang-btn active" id="lang-vi" onclick="setLanguage('vi')">🇻🇳 VI</button>
+        <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">🇺🇸 EN</button>
+        <button class="lang-btn" id="lang-zh" onclick="setLanguage('zh')">🇨🇳 ZH</button>
+      </div>
+      <div id="authWidget" class="auth-widget"></div>
+    </div>
+  </div>
+  <p class="subtitle">Gộp từ 7 nguồn: Ixdzs · Biquge · 41nr · Quanben · Faloo · Fanqie · Hjwzw</p>
+  <div class="stats-bar" id="statsBar">
+    <div class="stat"><strong id="statTotal">—</strong><span id="lblUnique">Đầu truyện unique</span></div>
+    <div class="stat"><strong id="statDup">—</strong><span id="lblDup">Trùng ≥2 nguồn</span></div>
+    <div class="stat"><strong id="statSources">7</strong><span id="lblSources">Nguồn dữ liệu</span></div>
+  </div>
+  <div class="tabs" style="display: flex; gap: 12px; margin-top: 20px;">
+    <button class="tab-btn active" id="tabAll" onclick="switchTab('all')">🔍 Khám Phá</button>
+    <button class="tab-btn" id="tabBookshelf" onclick="switchTab('bookshelf')">⭐ Tủ Sách</button>
+    <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">⏳ Lịch Sử</button>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="search-box">
+    <span class="icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Tìm tên truyện, tác giả, mô tả..." oninput="debounceSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();currentPage=1;doSearch();}">
+  </div>
+  <select id="searchField" class="search-field-select" onchange="updateSearchPlaceholder();debounceSearch()">
+    <option value="all">🔎 Tất cả</option>
+    <option value="title">📖 Tên truyện</option>
+    <option value="author">✍ Tác giả</option>
+    <option value="hanviet">🏮 Hán Việt</option>
+    <option value="vietphrase">📝 Việt dịch</option>
+    <option value="chinese">🀄 Gốc Trung</option>
+    <option value="description">📋 Mô tả</option>
+  </select>
+  <select id="filterCategory" onchange="currentPage=1;doSearch()">
+    <option value="">— Tất cả thể loại —</option>
+    <option value="玄幻">Huyền Huyễn / Kỳ Huyễn</option>
+    <option value="都市">Đô Thị / Thanh Xuân</option>
+    <option value="言情">Ngôn Tình / Nữ Sinh / Xuyên Không</option>
+    <option value="女生">Nữ Sinh / Nữ Tần</option>
+    <option value="科幻">Khoa Huyễn / Linh Dị</option>
+    <option value="修真">Tu Chân / Tiên Hiệp</option>
+    <option value="仙侠">Tiên Hiệp</option>
+    <option value="武侠">Võ Hiệp / Kiếm Hiệp</option>
+    <option value="军事">Quân Sự / Lịch Sử</option>
+    <option value="历史">Lịch Sử</option>
+    <option value="网游">Võng Du / Cạnh Kỹ / Game</option>
+    <option value="同人">Đồng Nhân</option>
+    <option value="侦探">Trinh Thám / Suy Luận</option>
+    <option value="其他">Thể loại khác</option>
+  </select>
+  <select id="filterSource" onchange="currentPage=1;doSearch()">
+    <option value="">— Tất cả nguồn —</option>
+    <option value="Ixdzs">Ixdzs</option>
+    <option value="Biquge">Biquge</option>
+    <option value="41nr">41nr</option>
+    <option value="Quanben">Quanben</option>
+    <option value="Faloo">Faloo</option>
+    <option value="Fanqie">Fanqie</option>
+    <option value="Hjwzw">Hjwzw</option>
+  </select>
+  <select id="filterDup" onchange="currentPage=1;doSearch()">
+    <option value="">— Tất cả —</option>
+    <option value="multi">Trùng nhiều nguồn (≥2)</option>
+    <option value="single">Chỉ 1 nguồn</option>
+  </select>
+  <select id="filterChapters" onchange="currentPage=1;doSearch()">
+    <option value="">— Số chương —</option>
+    <option value="100">≥ 100 chương</option>
+    <option value="500">≥ 500 chương</option>
+    <option value="1000">≥ 1000 chương</option>
+    <option value="2000">≥ 2000 chương</option>
+  </select>
+  <select id="sortBy" onchange="doSearch()">
+    <option value="site_count DESC">Nhiều nguồn nhất</option>
+    <option value="chapters_max DESC">Nhiều chương nhất</option>
+    <option value="word_count_max DESC">Nhiều từ nhất</option>
+    <option value="title ASC">Tên A→Z</option>
+    <option value="title DESC">Tên Z→A</option>
+    <option value="id ASC">Mặc định</option>
+  </select>
+  <button id="clearFilterBtn" class="btn btn-outline" onclick="clearSearch()">✕ Xóa lọc</button>
+</div>
+<div class="active-filters" id="activeFilters"></div>
+
+<div id="confirmModal" class="confirm-modal">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">⚠️ Xác nhận</h3>
+    <p id="confirmMessage">Bạn có chắc chắn muốn thực hiện?</p>
+    <div class="actions">
+      <button class="btn-cancel" onclick="closeConfirm()" id="confirmCancelBtn">Hủy bỏ</button>
+      <button class="btn-danger" id="confirmAction" onclick="">Xác nhận</button>
+    </div>
+  </div>
+</div>
+<div id="toastEl" class="toast"></div>
+
+<div class="main">
+  <div class="results-info" id="resultsInfo"></div>
+  <div class="grid" id="grid"><div class="loading">⏳ Đang tải dữ liệu...</div></div>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<div id="authModal" class="modal">
+  <div style="background:#131324; border:1px solid #2d2d6b; padding:24px; border-radius:16px; width:340px; box-shadow:0 10px 25px rgba(0,0,0,0.5); position:relative; display:flex; flex-direction:column; gap:14px;">
+    <span onclick="closeAuthModal()" style="position:absolute; right:16px; top:12px; font-size:20px; cursor:pointer; color:#64748b;">&times;</span>
+    <h3 id="authModalTitle" style="color:#fff; font-size:1.2rem; margin:0;">Đăng Nhập</h3>
+    
+    <input type="text" id="authUsername" placeholder="Tên đăng nhập" style="background:#1e1e3a; border:1px solid #2d2d6b; border-radius:8px; padding:10px; color:#fff; font-size:0.9rem; outline:none;">
+    <input type="email" id="authEmail" placeholder="Email (Nhận OTP)" style="background:#1e1e3a; border:1px solid #2d2d6b; border-radius:8px; padding:10px; color:#fff; font-size:0.9rem; outline:none; display:none;">
+    <input type="text" id="authOtp" placeholder="Nhập mã OTP từ Email" style="background:#1e1e3a; border:1px solid #2d2d6b; border-radius:8px; padding:10px; color:#fff; font-size:0.9rem; outline:none; display:none;">
+    <input type="password" id="authPassword" placeholder="Mật khẩu" style="background:#1e1e3a; border:1px solid #2d2d6b; border-radius:8px; padding:10px; color:#fff; font-size:0.9rem; outline:none;">
+    
+    <div id="authError" style="color:#ef4444; font-size:0.8rem; display:none;"></div>
+    
+    <button class="btn" id="authSubmitBtn" onclick="submitAuth()" style="width:100%; padding:10px;">Xác nhận</button>
+    
+    <!-- Google Login Container -->
+    <div id="googleSignInContainer" style="display:flex; justify-content:center; margin-top:4px;">
+      <div id="g_id_onload"
+           data-client_id="846826769861-s88vrg8okk1n71im3pv2oruembouklc1.apps.googleusercontent.com"
+           data-context="signin"
+           data-ux_mode="popup"
+           data-callback="handleGoogleSignIn"
+           data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin"
+           data-type="standard"
+           data-shape="rectangular"
+           data-theme="filled_blue"
+           data-text="signin_with"
+           data-size="large"
+           data-logo_alignment="left"
+           data-width="290">
+      </div>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:6px; text-align:center; font-size:0.8rem; color:#94a3b8; margin-top:6px;">
+      <div>
+        <span id="authToggleText">Chưa có tài khoản?</span> 
+        <a href="javascript:void(0)" onclick="toggleAuthMode()" id="authToggleLink" style="color:#6366f1; text-decoration:none; font-weight:500;">Đăng ký ngay</a>
+      </div>
+      <div id="forgotPasswordContainer">
+        <a href="javascript:void(0)" onclick="switchToForgotMode()" id="forgotPasswordLink" style="color:#94a3b8; text-decoration:none; font-size:0.75rem;">Quên mật khẩu?</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VIP Upgrade Modal -->
+<div id="vipModal" class="modal">
+  <style>
+    @keyframes pulse-glow {
+      0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(103, 232, 249, 0.7); opacity: 0.5; }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(103, 232, 249, 0); opacity: 1; }
+      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(103, 232, 249, 0); opacity: 0.5; }
+    }
+  </style>
+  <div style="background: linear-gradient(135deg, #111122 0%, #17172e 100%); border: 1px solid rgba(99, 102, 241, 0.35); padding: 28px; border-radius: 20px; width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(99, 102, 241, 0.15); position: relative; display: flex; flex-direction: column; gap: 18px; font-family: 'Inter', sans-serif;">
+    <span onclick="closeVipModal()" style="position: absolute; right: 20px; top: 16px; font-size: 24px; cursor: pointer; color: #64748b; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#64748b'">&times;</span>
+    
+    <div style="text-align: center;">
+      <h3 style="color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0 0 6px 0; background: linear-gradient(90deg, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; justify-content: center; gap: 8px;">👑 NÂNG CẤP VIP</h3>
+      <p style="color: #94a3b8; font-size: 0.82rem; line-height: 1.4; margin: 0;">Mở khoá toàn bộ đặc quyền Premium: AI dịch nhanh, không giới hạn ký tự, phát Audio/TTS giọng đọc AI tự nhiên.</p>
+    </div>
+    
+    <div id="vipPlanSelection" style="display: flex; flex-direction: column; gap: 12px;">
+      <div onclick="selectVipPlan('month')" id="planCard_month" style="background: rgba(255,255,255,0.02); border: 1.5px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); display: flex; justify-content: space-between; align-items: center;" onmouseover="this.style.transform='translateY(-2px)'; this.style.background='rgba(255,255,255,0.04)';" onmouseout="this.style.transform='translateY(0)'; this.style.background='rgba(255,255,255,0.02)';">
+        <div>
+          <h4 style="color: #fff; font-size: 0.95rem; font-weight: 600; margin: 0;">Gói VIP 1 Tháng</h4>
+          <p style="color: #64748b; font-size: 0.75rem; margin: 4px 0 0 0;">Dịch AI & Nghe TTS không giới hạn</p>
+        </div>
+        <div style="text-align: right;">
+          <span style="color: #fbbf24; font-weight: 700; font-size: 1.15rem;">50.000đ</span>
+        </div>
+      </div>
+      
+      <div onclick="selectVipPlan('year')" id="planCard_year" style="background: rgba(255,255,255,0.02); border: 1.5px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); display: flex; justify-content: space-between; align-items: center;" onmouseover="this.style.transform='translateY(-2px)'; this.style.background='rgba(255,255,255,0.04)';" onmouseout="this.style.transform='translateY(0)'; this.style.background='rgba(255,255,255,0.02)';">
+        <div>
+          <h4 style="color: #fff; font-size: 0.95rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px;">Gói VIP 1 Năm <span style="background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #0f0f1a; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 6px; text-transform: uppercase;">TIẾT KIỆM 67%</span></h4>
+          <p style="color: #64748b; font-size: 0.75rem; margin: 4px 0 0 0;">Giá ưu đãi tốt nhất, gia hạn tự động</p>
+        </div>
+        <div style="text-align: right;">
+          <span style="color: #fbbf24; font-weight: 700; font-size: 1.15rem;">200.000đ</span>
+        </div>
+      </div>
+      
+      <button class="btn" onclick="initiateVipPayment()" style="margin-top: 8px; padding: 13px; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.5px; background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); border-radius: 12px; transition: 0.2s;">Tiến Hành Thanh Toán</button>
+    </div>
+    
+    <!-- Payment QR View -->
+    <div id="vipPaymentView" style="display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%;">
+      <div style="background: #fff; padding: 12px; border-radius: 16px; display: flex; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.25); border: 2px solid rgba(251, 191, 36, 0.3);">
+        <img id="vipQrImage" src="" alt="QR VietQR" style="width: 190px; height: 190px; display: block; border-radius: 8px;">
+      </div>
+      
+      <!-- Bank details container -->
+      <div style="width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 16px; font-size: 0.85rem; color: #e2e8f0; line-height: 1.6; text-align: left; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+          <span style="color: #94a3b8; font-weight: 500;">Ngân hàng</span>
+          <strong id="vipBankName" style="color: #fff; font-size: 0.9rem;">--</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+          <span style="color: #94a3b8; font-weight: 500;">Số tài khoản</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <strong id="vipBankAccountNo" style="color: #fff; font-size: 0.9rem; user-select: all; font-family: monospace;">--</strong>
+            <button onclick="copyText(document.getElementById('vipBankAccountNo').textContent)" style="background: rgba(255,255,255,0.08); border: none; border-radius: 4px; padding: 2px 6px; color: #a5b4fc; font-size: 0.65rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">Sao chép</button>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+          <span style="color: #94a3b8; font-weight: 500;">Tên tài khoản</span>
+          <strong id="vipBankAccountName" style="color: #fff; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 0.5px;">--</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+          <span style="color: #94a3b8; font-weight: 500;">Số tiền</span>
+          <strong id="vipPaymentAmount" style="color: #fbbf24; font-size: 1.05rem; font-weight: 700;">--</strong>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+          <span style="color: #94a3b8; font-weight: 500;">Nội dung chuyển khoản <span style="color: #ef4444;">*</span></span>
+          <div style="display: flex; gap: 6px; width: 100%;">
+            <div style="flex: 1; background: #0f0f1a; border: 1.5px dashed rgba(251, 191, 36, 0.4); padding: 8px; border-radius: 8px; font-family: monospace; font-size: 1.15rem; color: #fbbf24; font-weight: bold; text-align: center; letter-spacing: 1px; user-select: all;" id="vipTransferContent">--</div>
+            <button onclick="copyText(document.getElementById('vipTransferContent').textContent)" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 8px; padding: 0 12px; color: #a5b4fc; font-weight: 600; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(99, 102, 241, 0.35)'" onmouseout="this.style.background='rgba(99, 102, 241, 0.2)'">Copy</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Auto checking status indicator -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; color: #67e8f9; font-size: 0.75rem;">
+        <span style="display: inline-block; width: 6px; height: 6px; background-color: #67e8f9; border-radius: 50%; animation: pulse-glow 1.5s infinite;"></span>
+        <span>Hệ thống đang kiểm tra giao dịch tự động...</span>
+      </div>
+      
+      <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
+        <button class="btn btn-outline" onclick="backToPlans()" style="flex: 1; padding: 11px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15); color: #94a3b8; transition: 0.2s;" onmouseover="this.style.borderColor='#fff'; this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.color='#94a3b8';">Quay lại</button>
+        <button class="btn" onclick="checkPaymentStatusLoop()" style="flex: 1; padding: 11px; border-radius: 10px; background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #0f0f1a; font-weight: 700; border: none; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); transition: 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 20px rgba(245, 158, 11, 0.45)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(245, 158, 11, 0.3)';">Đã chuyển khoản</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "https://api-tienhiep.lyvuha.com";
+
+const T = {
+  vi: {
+    title: "📚 Kho Truyện Tổng Hợp",
+    subtitle: "Gộp từ 7 nguồn: Ixdzs · Biquge · 41nr · Quanben · Faloo · Fanqie · Hjwzw",
+    uniqueBooks: "Đầu truyện unique",
+    dupSources: "Trùng ≥2 nguồn",
+    sources: "Nguồn dữ liệu",
+    tabDiscover: "🔍 Khám Phá",
+    tabBookshelf: "⭐ Tủ Sách",
+    tabHistory: "⏳ Lịch Sử",
+    searchPlaceholder: "Tìm tên truyện, tác giả, mô tả...",
+    searchFieldAll: "🔎 Tất cả",
+    searchFieldTitle: "📖 Tên truyện",
+    searchFieldAuthor: "✍ Tác giả",
+    searchFieldHanviet: "🏮 Hán Việt",
+    searchFieldVietphrase: "📝 Việt dịch",
+    searchFieldChinese: "🀄 Gốc Trung",
+    searchFieldDesc: "📋 Mô tả",
+    allCategories: "— Tất cả thể loại —",
+    allSources: "— Tất cả nguồn —",
+    allDup: "— Tất cả —",
+    dupMulti: "Trùng nhiều nguồn (≥2)",
+    dupSingle: "Chỉ 1 nguồn",
+    allChapters: "— Số chương —",
+    ch100: "≥ 100 chương",
+    ch500: "≥ 500 chương",
+    ch1000: "≥ 1000 chương",
+    ch2000: "≥ 2000 chương",
+    sortBy: {
+      site_count: "Nhiều nguồn nhất",
+      chapters_max: "Nhiều chương nhất",
+      word_count_max: "Nhiều từ nhất",
+      title_asc: "Tên A→Z",
+      title_desc: "Tên Z→A",
+      default: "Mặc định"
+    },
+    clearFilter: "✕ Xóa lọc",
+    login: "Đăng Nhập",
+    logout: "Đăng xuất",
+    register: "Đăng Ký",
+    confirmTitle: "⚠️ Xác nhận",
+    confirmCancel: "Hủy bỏ",
+    confirmOk: "Xác nhận",
+    loading: "⏳ Đang tải dữ liệu...",
+    empty: "🔎 Không tìm thấy truyện nào",
+    loginToViewBookshelf: "🔒 Vui lòng đăng nhập để xem tủ sách.",
+    loginToViewHistory: "🔒 Vui lòng đăng nhập để xem lịch sử đọc.",
+    emptyHistory: "⏳ Lịch sử trống",
+    chapters: "Chương",
+    words: "Từ",
+    compareBtn: "🔍 So sánh 3 bản dịch",
+    addBookshelf: "⭐ Thêm vào tủ",
+    inBookshelf: "⭐ Đã lưu vào tủ",
+    readExternal: "📖 Đọc truyện ngoài ↗",
+    removeExternal: "⭐ Xóa khỏi tủ",
+    readBtn: "🔍 Đọc",
+    lastView: "Lần cuối xem",
+    clearHistoryBtn: "Xóa toàn bộ",
+    results: "kết quả — trang",
+    booksInShelf: "truyện trong tủ sách",
+    readHistoryCount: "Lịch sử đọc",
+    authRequired: "Vui lòng điền đầy đủ thông tin.",
+    connError: "Lỗi kết nối server",
+    regSuccess: "Đăng ký thành công! Hãy đăng nhập.",
+    removeFavTitle: "⚠️ Xóa khỏi tủ sách",
+    removeFavConfirm: "Bạn có chắc chắn muốn xóa truyện này khỏi tủ sách?",
+    removeFavSuccess: "Đã xóa khỏi tủ sách",
+    addFavSuccess: "Đã thêm vào tủ sách thành công!",
+    removeExtFavTitle: "⚠️ Xóa truyện ngoài",
+    removeExtFavConfirm: "Bạn có chắc muốn xóa truyện này khỏi tủ sách?",
+    removeExtFavSuccess: "Đã xóa truyện ngoài khỏi tủ sách",
+    clearHistTitle: "⚠️ Xóa lịch sử",
+    clearHistConfirm: "Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử đọc truyện? Hành động này không thể hoàn tác.",
+    clearHistSuccess: "Đã xóa toàn bộ lịch sử",
+    comparingText: "⏳ Đang so sánh...",
+    compFast: "⚡ Dịch Nhanh (Fast)",
+    compAdvanced: "✨ Dịch Chất Lượng (Advanced)",
+    compVietphrase: "📚 Dịch Vietphrase (Vietphrase)",
+    compHanviet: "🏮 Hán Việt (Hanviet)",
+    compError: "❌ Lỗi tải bản dịch",
+    cats: {
+      "玄幻奇幻": "Huyền Huyễn Kỳ Huyễn",
+      "言情穿越": "Ngôn Tình Xuyên Không",
+      "都市青春": "Đô Thị Thanh Xuân",
+      "女生": "Nữ Sinh / Nữ Tần",
+      "台言古言": "Đài Ngôn Cổ Ngôn",
+      "科幻灵异": "Khoa Huyễn Linh Dị",
+      "修真仙侠": "Tu Chân Tiên Hiệp",
+      "军事历史": "Quân Sự Lịch Sử",
+      "言情小说": "Ngôn Tình Tiểu Thuyết",
+      "同人小说": "Đồng Nhân Tiểu Thuyết",
+      "网游竞技": "Võng Du Cạnh Kỹ",
+      "都市言情": "Đô Thị Ngôn Tình",
+      "其它书籍": "Sách Khác",
+      "玄幻": "Huyền Huyễn",
+      "都市": "Đô Thị",
+      "同人": "Đồng Nhân",
+      "玄幻小说": "Huyền Huyễn Tiểu Thuyết",
+      "都市小说": "Đô Thị Tiểu Thuyết",
+      "侦探推理": "Trinh Thám Suy Luận",
+      "武侠仙侠": "Võ Hiệp Tiên Hiệp"
+    }
+  },
+  en: {
+    title: "📚 Merged Novels Library",
+    subtitle: "Merged from 7 sources: Ixdzs · Biquge · 41nr · Quanben · Faloo · Fanqie · Hjwzw",
+    uniqueBooks: "Unique Novels",
+    dupSources: "Duplicate ≥2 Sources",
+    sources: "Data Sources",
+    tabDiscover: "🔍 Discover",
+    tabBookshelf: "⭐ Bookshelf",
+    tabHistory: "⏳ History",
+    searchPlaceholder: "Search title, author, description...",
+    searchFieldAll: "🔎 All Fields",
+    searchFieldTitle: "📖 Title",
+    searchFieldAuthor: "✍ Author",
+    searchFieldHanviet: "🏮 Sino-Viet",
+    searchFieldVietphrase: "📝 Translation",
+    searchFieldChinese: "🀄 Chinese Original",
+    searchFieldDesc: "📋 Description",
+    allCategories: "— All Categories —",
+    allSources: "— All Sources —",
+    allDup: "— All Matches —",
+    dupMulti: "Multi-Source (≥2)",
+    dupSingle: "Single Source Only",
+    allChapters: "— Chapters —",
+    ch100: "≥ 100 ch",
+    ch500: "≥ 500 ch",
+    ch1000: "≥ 1000 ch",
+    ch2000: "≥ 2000 ch",
+    sortBy: {
+      site_count: "Most Sources",
+      chapters_max: "Most Chapters",
+      word_count_max: "Most Words",
+      title_asc: "Title A→Z",
+      title_desc: "Title Z→A",
+      default: "Default ID"
+    },
+    clearFilter: "✕ Clear Filters",
+    login: "Log In",
+    logout: "Log Out",
+    register: "Register",
+    confirmTitle: "⚠️ Confirmation",
+    confirmCancel: "Cancel",
+    confirmOk: "Confirm",
+    loading: "⏳ Loading data...",
+    empty: "🔎 No novels found",
+    loginToViewBookshelf: "🔒 Please log in to view your bookshelf.",
+    loginToViewHistory: "🔒 Please log in to view your history.",
+    emptyHistory: "⏳ History is empty",
+    chapters: "Ch",
+    words: "Words",
+    compareBtn: "🔍 Compare 3 Translations",
+    addBookshelf: "⭐ Save to Shelf",
+    inBookshelf: "⭐ Saved in Shelf",
+    readExternal: "📖 Read External ↗",
+    removeExternal: "⭐ Remove",
+    readBtn: "🔍 Read",
+    lastView: "Last viewed",
+    clearHistoryBtn: "Clear All",
+    results: "results — page",
+    booksInShelf: "novels in bookshelf",
+    readHistoryCount: "Reading History",
+    authRequired: "Please fill in all fields.",
+    connError: "Server connection error",
+    regSuccess: "Registration successful! Please log in.",
+    removeFavTitle: "⚠️ Remove from bookshelf",
+    removeFavConfirm: "Are you sure you want to remove this novel from your bookshelf?",
+    removeFavSuccess: "Removed from bookshelf",
+    addFavSuccess: "Successfully added to bookshelf!",
+    removeExtFavTitle: "⚠️ Remove external novel",
+    removeExtFavConfirm: "Are you sure you want to remove this external novel?",
+    removeExtFavSuccess: "Removed external novel from bookshelf",
+    clearHistTitle: "⚠️ Clear History",
+    clearHistConfirm: "Are you sure you want to clear ALL reading history? This action cannot be undone.",
+    clearHistSuccess: "Successfully cleared reading history",
+    comparingText: "⏳ Comparing...",
+    compFast: "⚡ Fast Translation",
+    compAdvanced: "✨ Advanced Translation",
+    compVietphrase: "📚 Vietphrase Translation",
+    compHanviet: "🏮 Sino-Viet (Hanviet)",
+    compError: "❌ Error loading translations",
+    cats: {
+      "玄幻奇幻": "Xuanhuan / Fantasy",
+      "言情穿越": "Romance / Time Travel",
+      "都市青春": "Urban / Youth",
+      "女生": "Female Lead",
+      "台言古言": "Taiwanese / Ancient Romance",
+      "科幻灵异": "Sci-Fi / Supernatural",
+      "修真仙侠": "Cultivation / Xianxia",
+      "军事历史": "Military / History",
+      "言情小说": "Romance Novels",
+      "同人小说": "Fanfiction",
+      "网游竞技": "Gaming / Esports",
+      "都市言情": "Urban Romance",
+      "其它书籍": "Other Books",
+      "玄幻": "Xuanhuan",
+      "都市": "Urban",
+      "同人": "Fanfic",
+      "玄幻小说": "Xuanhuan Novels",
+      "都市小说": "Urban Novels",
+      "侦探推理": "Mystery / Detective",
+      "武侠仙侠": "Wuxia / Xianxia"
+    }
+  },
+  zh: {
+    title: "📚 聚合小说书库",
+    subtitle: "聚合自7个源站: 爱下电子书 · 笔趣阁 · 41nr · 全本书首 · 飞卢 · 番茄 · 红袖添香",
+    uniqueBooks: "独家小说数",
+    dupSources: "重合 ≥2 来源",
+    sources: "数据源数量",
+    tabDiscover: "🔍 发现小说",
+    tabBookshelf: "⭐ 我的书架",
+    tabHistory: "⏳ 阅读历史",
+    searchPlaceholder: "搜索书名、作者、简介...",
+    searchFieldAll: "🔎 全文搜索",
+    searchFieldTitle: "📖 按书名",
+    searchFieldAuthor: "✍ 按作者",
+    searchFieldHanviet: "🏮 汉越音译",
+    searchFieldVietphrase: "📝 越文翻译",
+    searchFieldChinese: "🀄 中文原名",
+    searchFieldDesc: "📋 按简介",
+    allCategories: "— 全部题材 —",
+    allSources: "— 全部来源 —",
+    allDup: "— 重合筛选 —",
+    dupMulti: "多站重合 (≥2)",
+    dupSingle: "仅单一来源",
+    allChapters: "— 章节字数 —",
+    ch100: "≥ 100 章",
+    ch500: "≥ 500 章",
+    ch1000: "≥ 1000 章",
+    ch2000: "≥ 2000 章",
+    sortBy: {
+      site_count: "来源最多",
+      chapters_max: "章节最多",
+      word_count_max: "字数最多",
+      title_asc: "书名 A→Z",
+      title_desc: "书名 Z→A",
+      default: "默认排序"
+    },
+    clearFilter: "✕ 清除筛选",
+    login: "登录",
+    logout: "退出",
+    register: "注册",
+    confirmTitle: "⚠️ 操作确认",
+    confirmCancel: "取消",
+    confirmOk: "确认",
+    loading: "⏳ 正在加载数据...",
+    empty: "🔎 未找到匹配小说",
+    loginToViewBookshelf: "🔒 请先登录以查看您的书架。",
+    loginToViewHistory: "🔒 请先登录以查看您的历史记录。",
+    emptyHistory: "⏳ 历史记录为空",
+    chapters: "章",
+    words: "字",
+    compareBtn: "🔍 对比三种翻译",
+    addBookshelf: "⭐ 收藏至书架",
+    inBookshelf: "⭐ 已收藏",
+    readExternal: "📖 打开原站 ↗",
+    removeExternal: "⭐ 取消收藏",
+    readBtn: "🔍 阅读",
+    lastView: "最后阅读",
+    clearHistoryBtn: "清空历史",
+    results: "个结果 — 第",
+    booksInShelf: "本收藏小说",
+    readHistoryCount: "阅读历史记录",
+    authRequired: "请填写所有字段。",
+    connError: "服务器连接错误",
+    regSuccess: "注册成功！请登录。",
+    removeFavTitle: "⚠️ 移出书架",
+    removeFavConfirm: "您确定要将这部小说从书架中移出吗？",
+    removeFavSuccess: "已从书架中移出",
+    addFavSuccess: "成功加入书架！",
+    removeExtFavTitle: "⚠️ 移出外部小说",
+    removeExtFavConfirm: "您确定要移出这部外部小说吗？",
+    removeExtFavSuccess: "已从书架中移出外部小说",
+    clearHistTitle: "⚠️ 清空历史记录",
+    clearHistConfirm: "您确定要清空所有阅读历史记录吗？此操作无法撤销。",
+    clearHistSuccess: "已成功清空阅读历史记录",
+    comparingText: "⏳ 正在对比...",
+    compFast: "⚡ 快速翻译",
+    compAdvanced: "✨ 高级优质翻译",
+    compVietphrase: "📚 越文词库翻译",
+    compHanviet: "🏮 汉越音译",
+    compError: "❌ 加载翻译失败",
+    cats: {
+      "玄幻奇幻": "玄幻奇幻",
+      "言情穿越": "言言穿越",
+      "都市青春": "都市青春",
+      "女生": "女生频道",
+      "台言古言": "台言古言",
+      "科幻灵异": "科幻灵异",
+      "修真仙侠": "修真仙侠",
+      "军事历史": "军事历史",
+      "言情小说": "言情小说",
+      "同人小说": "同人小说",
+      "网游竞技": "网游竞技",
+      "都市言情": "都市言情",
+      "其它书籍": "其它书籍",
+      "玄幻": "玄幻",
+      "都市": "都市",
+      "同人": "同人",
+      "玄幻小说": "玄幻小说",
+      "都市小说": "都市小说",
+      "侦探推理": "侦探推理",
+      "武侠仙侠": "武侠仙侠"
+    }
+  }
+};
+
+let currentLang = 'vi';
+let currentPage = 1, totalPages = 1, totalCount = 0;
+let debounceTimer = null;
+let activeTab = 'all'; // 'all', 'bookshelf', 'history'
+let currentUser = null;
+let bookshelfIds = new Set();
+let authMode = 'login'; // 'login' or 'register'
+
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('preferredLanguage', lang);
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'lang-' + lang);
+  });
+  updateUILanguage();
+  currentPage = 1;
+  doSearch();
+}
+
+function updateUILanguage() {
+  const t = T[currentLang];
+  document.title = t.title;
+  document.getElementById('titleHeader').textContent = t.title;
+  document.querySelector('.subtitle').textContent = t.subtitle;
+  
+  // Stat bar labels
+  document.getElementById('lblUnique').textContent = t.uniqueBooks;
+  document.getElementById('lblDup').textContent = t.dupSources;
+  document.getElementById('lblSources').textContent = t.sources;
+
+  // Tabs
+  document.getElementById('tabAll').textContent = t.tabDiscover;
+  document.getElementById('tabBookshelf').textContent = t.tabBookshelf;
+  document.getElementById('tabHistory').textContent = t.tabHistory;
+
+  // Inputs & placeholders
+  updateSearchPlaceholder();
+
+  // Search Field select dropdown
+  const sf = document.getElementById('searchField');
+  sf.options[0].text = t.searchFieldAll;
+  sf.options[1].text = t.searchFieldTitle;
+  sf.options[2].text = t.searchFieldAuthor;
+  sf.options[3].text = t.searchFieldHanviet;
+  sf.options[4].text = t.searchFieldVietphrase;
+  sf.options[5].text = t.searchFieldChinese;
+  sf.options[6].text = t.searchFieldDesc;
+
+  // Category select dropdown
+  const cat = document.getElementById('filterCategory');
+  cat.options[0].text = t.allCategories;
+  // Translate category values
+  const catKeys = ["玄幻奇幻", "言情穿越", "都市青春", "女生", "台言古言", "科幻灵异", "修真仙侠", "军事历史", "言情小说", "同人小说", "网游竞技", "都市言情", "其它书籍", "玄幻", "都市", "同人", "玄幻小说", "都市小说", "侦探推理", "武侠仙侠"];
+  // Note: we can map the UI texts of categories!
+  const catOptionsMap = {
+    "玄幻": t.cats["玄幻"] || "Huyền Huyễn",
+    "都市": t.cats["都市"] || "Đô Thị",
+    "言情": t.cats["言情小说"] || "Ngôn Tình",
+    "女生": t.cats["女生"] || "Nữ Sinh",
+    "科幻": t.cats["科幻灵异"] || "Khoa Huyễn",
+    "修真": t.cats["修真仙侠"] || "Tu Chân",
+    "仙侠": t.cats["武侠仙侠"] || "Tiên Hiệp",
+    "武侠": t.cats["武侠仙侠"] || "Võ Hiệp",
+    "军事": t.cats["军事历史"] || "Quân Sự",
+    "历史": t.cats["军事历史"] || "Lịch Sử",
+    "网游": t.cats["网游竞技"] || "Võng Du",
+    "同人": t.cats["同人小说"] || "Đồng Nhân",
+    "侦探": t.cats["侦探推理"] || "Trinh Thám",
+    "其他": t.cats["其它书籍"] || "Khác"
+  };
+  
+  // We can update the option texts of filterCategory
+  for (let i = 1; i < cat.options.length; i++) {
+    const val = cat.options[i].value;
+    if (catOptionsMap[val]) {
+      cat.options[i].text = catOptionsMap[val];
+    }
+  }
+
+  // Source select dropdown
+  document.getElementById('filterSource').options[0].text = t.allSources;
+
+  // Duplicate select dropdown
+  const fd = document.getElementById('filterDup');
+  fd.options[0].text = t.allDup;
+  fd.options[1].text = t.dupMulti;
+  fd.options[2].text = t.dupSingle;
+
+  // Chapters dropdown
+  const fc = document.getElementById('filterChapters');
+  fc.options[0].text = t.allChapters;
+  fc.options[1].text = t.ch100;
+  fc.options[2].text = t.ch500;
+  fc.options[3].text = t.ch1000;
+  fc.options[4].text = t.ch2000;
+
+  // Sort dropdown
+  const sb = document.getElementById('sortBy');
+  sb.options[0].text = t.sortBy.site_count;
+  sb.options[1].text = t.sortBy.chapters_max;
+  sb.options[2].text = t.sortBy.word_count_max;
+  sb.options[3].text = t.sortBy.title_asc;
+  sb.options[4].text = t.sortBy.title_desc;
+  sb.options[5].text = t.sortBy.default;
+
+  // Clear filters button
+  const clearBtn = document.getElementById('clearFilterBtn');
+  if (clearBtn) clearBtn.textContent = t.clearFilter;
+
+  // Confirm modal buttons
+  document.getElementById('confirmCancelBtn').textContent = t.confirmCancel;
+  document.getElementById('confirmAction').textContent = t.confirmOk;
+
+  updateAuthWidget();
+}
+
+function debounceSearch(){
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(()=>{ currentPage=1; doSearch(); }, 350);
+}
+
+function clearSearch(){
+  document.getElementById('searchInput').value='';
+  document.getElementById('searchField').value='all';
+  document.getElementById('filterCategory').value='';
+  document.getElementById('filterSource').value='';
+  document.getElementById('filterDup').value='';
+  document.getElementById('filterChapters').value='';
+  document.getElementById('sortBy').value='site_count DESC';
+  updateSearchPlaceholder();
+  currentPage=1; doSearch();
+}
+
+let toastTimer = null;
+function showToast(msg, type='') {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.className = 'toast ' + type;
+  requestAnimationFrame(() => { el.classList.add('show'); });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3000);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast("Đã sao chép vào bộ nhớ tạm!", "info");
+  }).catch(() => {
+    showToast("Không thể sao chép tự động", "error");
+  });
+}
+
+let confirmCallback = null;
+function showConfirm(title, message, callback) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  confirmCallback = callback;
+  document.getElementById('confirmAction').onclick = () => { closeConfirm(); if(confirmCallback) confirmCallback(); };
+  document.getElementById('confirmModal').classList.add('show');
+}
+function closeConfirm() {
+  document.getElementById('confirmModal').classList.remove('show');
+  confirmCallback = null;
+}
+
+function updateSearchPlaceholder() {
+  const field = document.getElementById('searchField').value;
+  const input = document.getElementById('searchInput');
+  const placeholders = {
+    vi: {
+      all: 'Tìm tên truyện, tác giả, mô tả...',
+      title: 'Tìm theo tên truyện (Hán Việt / Việt dịch / Gốc)...',
+      author: 'Tìm theo tên tác giả...',
+      hanviet: 'Tìm theo Hán Việt (vd: Hoàn Mỹ Thế Giới)...',
+      vietphrase: 'Tìm theo bản dịch Vietphrase...',
+      chinese: 'Tìm theo tên gốc tiếng Trung (vd: 完美世界)...',
+      description: 'Tìm trong mô tả nội dung truyện...'
+    },
+    en: {
+      all: 'Search title, author, description...',
+      title: 'Search by title (Sino-Viet / Translation / Original)...',
+      author: 'Search by author name...',
+      hanviet: 'Search by Sino-Viet (e.g. Hoan My The Gioi)...',
+      vietphrase: 'Search by Vietphrase translation...',
+      chinese: 'Search by Chinese original (e.g. 完美世界)...',
+      description: 'Search inside book description...'
+    },
+    zh: {
+      all: '搜索书名、作者、简介...',
+      title: '按书名搜索（汉越/译文/原名）...',
+      author: '按作者名字搜索...',
+      hanviet: '按汉越拼音搜索（如 Hoan My The Gioi）...',
+      vietphrase: '按越文翻译搜索...',
+      chinese: '按中文原名搜索（如 完美世界）...',
+      description: '在小说简介中搜索...'
+    }
+  };
+  const langPlaceholders = placeholders[currentLang] || placeholders.vi;
+  input.placeholder = langPlaceholders[field] || langPlaceholders.all;
+}
+
+function updateActiveFilters() {
+  const container = document.getElementById('activeFilters');
+  if (activeTab !== 'all') { container.innerHTML = ''; return; }
+  let tags = [];
+  const q = document.getElementById('searchInput').value.trim();
+  const field = document.getElementById('searchField').value;
+  const t = T[currentLang];
+  
+  const fieldLabels = {
+    all: t.searchFieldAll,
+    title: t.searchFieldTitle,
+    author: t.searchFieldAuthor,
+    hanviet: t.searchFieldHanviet,
+    vietphrase: t.searchFieldVietphrase,
+    chinese: t.searchFieldChinese,
+    description: t.searchFieldDesc
+  };
+  
+  if (q) tags.push({label: fieldLabels[field]+': "'+q+'"', clear: ()=>{document.getElementById('searchInput').value='';currentPage=1;doSearch();}});
+  
+  const cat = document.getElementById('filterCategory');
+  const catPrefix = currentLang === 'vi' ? 'Thể loại: ' : (currentLang === 'zh' ? '题材: ' : 'Category: ');
+  if (cat.value) tags.push({label: catPrefix + cat.options[cat.selectedIndex].text, clear: ()=>{cat.value='';currentPage=1;doSearch();}});
+  
+  const src = document.getElementById('filterSource');
+  const srcPrefix = currentLang === 'vi' ? 'Nguồn: ' : (currentLang === 'zh' ? '来源: ' : 'Source: ');
+  if (src.value) tags.push({label: srcPrefix + src.value, clear: ()=>{src.value='';currentPage=1;doSearch();}});
+  
+  const dup = document.getElementById('filterDup');
+  if (dup.value) tags.push({label: dup.options[dup.selectedIndex].text, clear: ()=>{dup.value='';currentPage=1;doSearch();}});
+  
+  const ch = document.getElementById('filterChapters');
+  const chLabel = currentLang === 'vi' ? '≥'+ch.value+' chương' : (currentLang === 'zh' ? '≥'+ch.value+'章' : '≥'+ch.value+' ch');
+  if (ch.value) tags.push({label: chLabel, clear: ()=>{ch.value='';currentPage=1;doSearch();}});
+  
+  if (!tags.length) { container.innerHTML = ''; return; }
+  container.innerHTML = tags.map((t,i) => '<span class="active-filter-tag" onclick="activeFilterClear('+i+')">'+esc(t.label)+' <span class="remove">✕</span></span>').join('');
+  window._activeFilterClears = tags.map(t => t.clear);
+}
+function activeFilterClear(idx) { if(window._activeFilterClears && window._activeFilterClears[idx]) window._activeFilterClears[idx](); }
+
+async function checkAuth() {
+  try {
+    const r = await fetch(API_BASE + '/api/auth/me');
+    const d = await r.json();
+    if (d.logged_in) {
+      currentUser = d.user;
+    } else {
+      currentUser = null;
+    }
+    updateAuthWidget();
+    await loadBookshelfIds();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function updateAuthWidget() {
+  const widget = document.getElementById('authWidget');
+  const t = T[currentLang];
+  if (currentUser) {
+    let vipBadge = "";
+    let upgradeBtn = "";
+    if (currentUser.vip_status === 1) {
+      vipBadge = `<span style="color:#fbbf24; font-weight:bold; margin-left:4px; font-size:0.85rem;">👑 VIP</span>`;
+    } else {
+      upgradeBtn = `<button class="btn" onclick="showVipModal()" style="padding:6px 12px; font-size:0.8rem; background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#0f0f1a; font-weight:700; margin-right:4px; border:none; border-radius:6px; cursor:pointer;">Nâng cấp VIP 👑</button>`;
+    }
+    widget.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:0.9rem;color:#a5b4fc;font-weight:500;">👤 ${esc(currentUser.username)}${vipBadge}</span>
+        ${upgradeBtn}
+        <button class="btn btn-outline" onclick="logout()" style="padding:6px 12px;font-size:0.8rem;">${t.logout}</button>
+      </div>`;
+  } else {
+    widget.innerHTML = `<button class="btn" onclick="showAuthModal()" style="padding:6px 16px;font-size:0.85rem;">${t.login}</button>`;
+  }
+}
+
+function showAuthModal() {
+  authMode = 'login';
+  resetAuthModalInputs();
+  document.getElementById('authModal').style.display = 'flex';
+}
+
+function closeAuthModal() {
+  document.getElementById('authModal').style.display = 'none';
+}
+
+function resetAuthModalInputs() {
+  const t = T[currentLang];
+  
+  // Set placeholders
+  const placeholders = {
+    vi: { username: "Tên đăng nhập", password: "Mật khẩu" },
+    en: { username: "Username", password: "Password" },
+    zh: { username: "用户名", password: "密码" }
+  };
+  const lp = placeholders[currentLang] || placeholders.vi;
+  document.getElementById('authUsername').placeholder = lp.username;
+  document.getElementById('authPassword').placeholder = lp.password;
+
+  document.getElementById('authUsername').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authOtp').value = '';
+  
+  document.getElementById('authError').style.display = 'none';
+  
+  // Display states
+  document.getElementById('authUsername').style.display = 'block';
+  document.getElementById('authPassword').style.display = 'block';
+  document.getElementById('authEmail').style.display = 'none';
+  document.getElementById('authOtp').style.display = 'none';
+  
+  document.getElementById('googleSignInContainer').style.display = 'flex';
+  document.getElementById('forgotPasswordContainer').style.display = 'block';
+  
+  if (authMode === 'login') {
+    document.getElementById('authModalTitle').textContent = t.login;
+    document.getElementById('authToggleText').textContent = currentLang === 'vi' ? 'Chưa có tài khoản?' : (currentLang === 'zh' ? '还没有账号吗？' : 'No account yet?');
+    document.getElementById('authToggleLink').textContent = currentLang === 'vi' ? 'Đăng ký ngay' : (currentLang === 'zh' ? '立即注册' : 'Register now');
+    document.getElementById('authSubmitBtn').textContent = currentLang === 'vi' ? 'Xác nhận' : 'Submit';
+  } else if (authMode === 'register') {
+    document.getElementById('authModalTitle').textContent = t.register;
+    document.getElementById('authEmail').style.display = 'block';
+    document.getElementById('authToggleText').textContent = currentLang === 'vi' ? 'Đã có tài khoản?' : (currentLang === 'zh' ? '已有账号？' : 'Already have an account?');
+    document.getElementById('authToggleLink').textContent = t.login;
+    document.getElementById('authSubmitBtn').textContent = currentLang === 'vi' ? 'Đăng ký' : 'Register';
+  }
+}
+
+function toggleAuthMode() {
+  if (authMode === 'login') {
+    authMode = 'register';
+  } else {
+    authMode = 'login';
+  }
+  resetAuthModalInputs();
+}
+
+function switchToForgotMode() {
+  authMode = 'forgot';
+  document.getElementById('authError').style.display = 'none';
+  document.getElementById('authModalTitle').textContent = "Quên Mật Khẩu";
+  
+  document.getElementById('authUsername').style.display = 'none';
+  document.getElementById('authPassword').style.display = 'none';
+  document.getElementById('authOtp').style.display = 'none';
+  document.getElementById('authEmail').style.display = 'block';
+  document.getElementById('googleSignInContainer').style.display = 'none';
+  document.getElementById('forgotPasswordContainer').style.display = 'none';
+  
+  document.getElementById('authToggleText').textContent = "Quay lại";
+  document.getElementById('authToggleLink').textContent = "Đăng nhập";
+  document.getElementById('authSubmitBtn').textContent = "Gửi mã OTP";
+}
+
+function switchToResetMode() {
+  authMode = 'reset';
+  document.getElementById('authError').style.display = 'none';
+  document.getElementById('authModalTitle').textContent = "Khôi Phục Mật Khẩu";
+  
+  document.getElementById('authUsername').style.display = 'none';
+  document.getElementById('authEmail').style.display = 'block';
+  document.getElementById('authOtp').style.display = 'block';
+  document.getElementById('authPassword').style.display = 'block';
+  document.getElementById('authPassword').placeholder = "Mật khẩu mới";
+  document.getElementById('googleSignInContainer').style.display = 'none';
+  document.getElementById('forgotPasswordContainer').style.display = 'none';
+  
+  document.getElementById('authToggleText').textContent = "Quay lại";
+  document.getElementById('authToggleLink').textContent = "Đăng nhập";
+  document.getElementById('authSubmitBtn').textContent = "Đổi mật khẩu";
+}
+
+function handleGoogleSignIn(response) {
+  const errDiv = document.getElementById('authError');
+  errDiv.style.display = 'none';
+  
+  fetch(API_BASE + '/api/auth/google/callback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential: response.credential })
+  })
+  .then(res => {
+    if (!res.ok) {
+      return res.json().then(d => { throw new Error(d.error || "Lỗi đăng nhập Google") });
+    }
+    return res.json();
+  })
+  .then(data => {
+    currentUser = data.user;
+    updateAuthWidget();
+    closeAuthModal();
+    showToast("Đăng nhập Google thành công!", false);
+    loadBookshelfIds();
+    doSearch();
+  })
+  .catch(err => {
+    errDiv.textContent = err.message;
+    errDiv.style.display = 'block';
+  });
+}
+
+async function submitAuth() {
+  const u = document.getElementById('authUsername').value.trim();
+  const p = document.getElementById('authPassword').value;
+  const email = document.getElementById('authEmail').value.trim();
+  const otp = document.getElementById('authOtp').value.trim();
+  const errDiv = document.getElementById('authError');
+  errDiv.style.display = 'none';
+  const t = T[currentLang];
+  
+  if (authMode === 'login') {
+    if (!u || !p) {
+      errDiv.textContent = t.authRequired;
+      errDiv.style.display = 'block';
+      return;
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: u, password: p})
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        errDiv.textContent = d.error || 'Có lỗi xảy ra';
+        errDiv.style.display = 'block';
+      } else {
+        currentUser = d.user;
+        updateAuthWidget();
+        closeAuthModal();
+        await loadBookshelfIds();
+        doSearch();
+      }
+    } catch (e) {
+      errDiv.textContent = t.connError;
+      errDiv.style.display = 'block';
+    }
+  } else if (authMode === 'register') {
+    if (!u || !p) {
+      errDiv.textContent = t.authRequired;
+      errDiv.style.display = 'block';
+      return;
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/auth/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: u, password: p, email: email})
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        errDiv.textContent = d.error || 'Có lỗi xảy ra';
+        errDiv.style.display = 'block';
+      } else {
+        alert(t.regSuccess);
+        authMode = 'login';
+        resetAuthModalInputs();
+      }
+    } catch (e) {
+      errDiv.textContent = t.connError;
+      errDiv.style.display = 'block';
+    }
+  } else if (authMode === 'forgot') {
+    if (!email) {
+      errDiv.textContent = "Vui lòng nhập email.";
+      errDiv.style.display = 'block';
+      return;
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/auth/forgot-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email})
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        errDiv.textContent = d.error || 'Có lỗi xảy ra';
+        errDiv.style.display = 'block';
+      } else {
+        showToast(d.message, false);
+        switchToResetMode();
+      }
+    } catch (e) {
+      errDiv.textContent = "Lỗi kết nối máy chủ.";
+      errDiv.style.display = 'block';
+    }
+  } else if (authMode === 'reset') {
+    if (!email || !otp || !p) {
+      errDiv.textContent = "Vui lòng nhập đầy đủ thông tin.";
+      errDiv.style.display = 'block';
+      return;
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/auth/reset-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email, otp: otp, password: p})
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        errDiv.textContent = d.error || 'Có lỗi xảy ra';
+        errDiv.style.display = 'block';
+      } else {
+        alert(d.message);
+        authMode = 'login';
+        resetAuthModalInputs();
+      }
+    } catch (e) {
+      errDiv.textContent = "Lỗi kết nối máy chủ.";
+      errDiv.style.display = 'block';
+    }
+  }
+}
+
+async function logout() {
+  try {
+    await fetch(API_BASE + '/api/auth/logout', {method: 'POST'});
+    currentUser = null;
+    bookshelfIds.clear();
+    updateAuthWidget();
+    if (activeTab !== 'all') {
+      activeTab = 'all';
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('tabAll').classList.add('active');
+      updateFiltersVisibility();
+    }
+    doSearch();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+let selectedVipPlanId = 'month';
+let paymentPollingInterval = null;
+
+function showVipModal() {
+  if (!currentUser) {
+    showAuthModal();
+    return;
+  }
+  selectedVipPlanId = 'month';
+  document.getElementById('planCard_month').style.borderColor = '#fbbf24';
+  document.getElementById('planCard_year').style.borderColor = '#2d2d6b';
+  
+  document.getElementById('vipPlanSelection').style.display = 'flex';
+  document.getElementById('vipPaymentView').style.display = 'none';
+  document.getElementById('vipModal').style.display = 'flex';
+}
+
+function closeVipModal() {
+  document.getElementById('vipModal').style.display = 'none';
+  if (paymentPollingInterval) {
+    clearInterval(paymentPollingInterval);
+    paymentPollingInterval = null;
+  }
+}
+
+function selectVipPlan(planId) {
+  selectedVipPlanId = planId;
+  document.getElementById('planCard_month').style.borderColor = planId === 'month' ? '#fbbf24' : '#2d2d6b';
+  document.getElementById('planCard_year').style.borderColor = planId === 'year' ? '#fbbf24' : '#2d2d6b';
+}
+
+function initiateVipPayment() {
+  if (!currentUser) return;
+  
+  fetch(API_BASE + '/api/payment/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: selectedVipPlanId })
+  })
+  .then(res => {
+    if (!res.ok) {
+      return res.json().then(d => { throw new Error(d.error || "Không tạo được thanh toán") });
+    }
+    return res.json();
+  })
+  .then(data => {
+    document.getElementById('vipQrImage').src = data.qr_url;
+    document.getElementById('vipTransferContent').textContent = data.order_id;
+    document.getElementById('vipBankName').textContent = data.bank_info.bank;
+    document.getElementById('vipBankAccountNo').textContent = data.bank_info.account_no;
+    document.getElementById('vipBankAccountName').textContent = data.bank_info.account_name;
+    document.getElementById('vipPaymentAmount').textContent = data.amount_formatted;
+    
+    document.getElementById('vipPlanSelection').style.display = 'none';
+    document.getElementById('vipPaymentView').style.display = 'flex';
+    
+    startPaymentPolling(data.order_id);
+  })
+  .catch(err => {
+    showToast(err.message, true);
+  });
+}
+
+function backToPlans() {
+  if (paymentPollingInterval) {
+    clearInterval(paymentPollingInterval);
+    paymentPollingInterval = null;
+  }
+  document.getElementById('vipPlanSelection').style.display = 'flex';
+  document.getElementById('vipPaymentView').style.display = 'none';
+}
+
+function startPaymentPolling(orderId) {
+  if (paymentPollingInterval) clearInterval(paymentPollingInterval);
+  
+  paymentPollingInterval = setInterval(() => {
+    fetch(API_BASE + `/api/payment/status/${orderId}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'completed') {
+        clearInterval(paymentPollingInterval);
+        paymentPollingInterval = null;
+        showToast("Thanh toán thành công! Tài khoản của bạn đã được nâng cấp VIP 👑", false);
+        fetch(API_BASE + '/api/auth/me')
+        .then(res => res.json())
+        .then(meData => {
+          if (meData.logged_in) currentUser = meData.user;
+          updateAuthWidget();
+          closeVipModal();
+        });
+      } else if (data.status === 'expired') {
+        clearInterval(paymentPollingInterval);
+        paymentPollingInterval = null;
+        showToast("Yêu cầu thanh toán đã hết hạn.", true);
+        backToPlans();
+      }
+    })
+    .catch(err => console.error("Error polling payment status:", err));
+  }, 3000);
+}
+
+function checkPaymentStatusLoop() {
+  const orderId = document.getElementById('vipTransferContent').textContent;
+  if (!orderId || orderId === '--') return;
+  
+  fetch(API_BASE + '/api/payment/confirm-manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order_id: orderId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.message) {
+      showToast(data.message, false);
+    } else if (data.error) {
+      showToast(data.error, true);
+    }
+  })
+  .catch(err => {
+    showToast("Lỗi kết nối máy chủ", true);
+  });
+}
+
+async function loadBookshelfIds() {
+  if (!currentUser) {
+    bookshelfIds.clear();
+    return;
+  }
+  try {
+    const r = await fetch(API_BASE + '/api/bookshelf');
+    if (r.ok) {
+      const books = await r.json();
+      bookshelfIds = new Set(books.map(b => b.book_id));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function toggleFav(event, bookId) {
+  if (event) event.stopPropagation();
+  if (!currentUser) {
+    showAuthModal();
+    return;
+  }
+  const t = T[currentLang];
+  const inShelf = bookshelfIds.has(bookId);
+  if (inShelf) {
+    showConfirm(t.removeFavTitle, t.removeFavConfirm, () => doToggleFav(bookId, true));
+    return;
+  }
+  doToggleFav(bookId, false);
+}
+
+async function doToggleFav(bookId, isRemove) {
+  const url = isRemove ? API_BASE + '/api/bookshelf/remove' : '/api/bookshelf/add';
+  const t = T[currentLang];
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({book_id: bookId})
+    });
+    if (r.ok) {
+      if (isRemove) {
+        bookshelfIds.delete(bookId);
+        showToast(t.removeFavSuccess, 'error');
+      } else {
+        bookshelfIds.add(bookId);
+        showToast(t.addFavSuccess, 'success');
+      }
+      if (activeTab === 'bookshelf') {
+        doSearch();
+      } else {
+        const btns = document.querySelectorAll(`button[onclick*="toggleFav"][onclick*="${bookId}"]`);
+        btns.forEach(btn => {
+          const isFav = bookshelfIds.has(bookId);
+          if (isFav) {
+            btn.classList.add('active');
+            btn.innerHTML = '⭐ ' + t.inBookshelf;
+          } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '⭐ ' + t.addBookshelf;
+          }
+        });
+      }
+    } else {
+      const errData = await r.json();
+      const defaultErr = currentLang === 'vi' ? 'Có lỗi xảy ra' : (currentLang === 'zh' ? '发生错误' : 'An error occurred');
+      showToast(errData.error || defaultErr, 'error');
+    }
+  } catch (e) {
+    showToast(t.connError, 'error');
+    console.error(e);
+  }
+}
+
+async function removeExternalFav(event, bookUrl) {
+  if (event) event.stopPropagation();
+  if (!currentUser) return;
+  const t = T[currentLang];
+  showConfirm(t.removeExtFavTitle, t.removeExtFavConfirm, async () => {
+    try {
+      const r = await fetch(API_BASE + '/api/bookshelf/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: bookUrl})
+      });
+      if (r.ok) {
+        showToast(t.removeExtFavSuccess, 'error');
+        doSearch();
+      }
+    } catch (e) {
+      showToast(t.connError, 'error');
+      console.error(e);
+    }
+  });
+}
+
+async function recordReadHistory(bookId) {
+  if (!currentUser) return;
+  const readingLabel = currentLang === 'vi' ? 'Đang xem' : (currentLang === 'zh' ? '正在阅读' : 'Reading');
+  try {
+    await fetch(API_BASE + '/api/history/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({book_id: bookId, last_chapter: readingLabel})
+    });
+  } catch (e) {}
+}
+
+async function clearHistory() {
+  const t = T[currentLang];
+  showConfirm(t.clearHistTitle, t.clearHistConfirm, async () => {
+    try {
+      const r = await fetch(API_BASE + '/api/history/clear', {method: 'POST'});
+      if (r.ok) {
+        showToast(t.clearHistSuccess, 'success');
+        doSearch();
+      }
+    } catch (e) {
+      showToast(t.connError, 'error');
+    }
+  });
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  if (tab === 'all') document.getElementById('tabAll').classList.add('active');
+  if (tab === 'bookshelf') document.getElementById('tabBookshelf').classList.add('active');
+  if (tab === 'history') document.getElementById('tabHistory').classList.add('active');
+  
+  updateFiltersVisibility();
+  currentPage = 1;
+  doSearch();
+}
+
+function updateFiltersVisibility() {
+  const selects = ['searchField', 'filterCategory', 'filterSource', 'filterDup', 'filterChapters', 'sortBy'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (activeTab === 'all') ? '' : 'none';
+  });
+  const clearBtn = document.getElementById('clearFilterBtn');
+  if (clearBtn) clearBtn.style.display = (activeTab === 'all') ? '' : 'none';
+  document.getElementById('activeFilters').style.display = (activeTab === 'all') ? '' : 'none';
+}
+
+async function doSearch(){
+  const t = T[currentLang];
+  const q        = document.getElementById('searchInput').value.trim();
+  document.getElementById('grid').innerHTML='<div class="loading">'+t.loading+'</div>';
+
+  if (activeTab === 'all') {
+    const category = document.getElementById('filterCategory').value;
+    const source   = document.getElementById('filterSource').value;
+    const dup      = document.getElementById('filterDup').value;
+    const sort     = document.getElementById('sortBy').value;
+    const search_field = document.getElementById('searchField').value;
+    const min_chapters = document.getElementById('filterChapters').value;
+
+    const params = new URLSearchParams({q, category, source, dup, sort, search_field, min_chapters, page: currentPage, per_page: 30});
+    const resp = await fetch(API_BASE + '/api/books?' + params);
+    
+    if(!resp.ok){
+      const err = await resp.json();
+      const defaultErr = currentLang === 'vi' ? 'Có lỗi xảy ra' : (currentLang === 'zh' ? '发生错误' : 'An error occurred');
+      document.getElementById('grid').innerHTML='<div class="empty"><div class="icon">⚠️</div><div>'+esc(err.error || defaultErr)+'</div></div>';
+      document.getElementById('resultsInfo').innerHTML = '';
+      document.getElementById('pagination').innerHTML = '';
+      updateActiveFilters();
+      return;
+    }
+    const data = await resp.json();
+    totalPages  = data.pages;
+    totalCount  = data.total;
+
+    const pageOf = currentLang === 'vi' ? ' / trang ' : (currentLang === 'zh' ? ' / 页 ' : ' / page ');
+    document.getElementById('resultsInfo').innerHTML =
+      '<strong>' + data.total.toLocaleString() + '</strong> ' + t.results + ' ' + data.page + '/' + data.pages;
+
+    renderGrid(data.books);
+    renderPagination();
+    updateActiveFilters();
+  } else if (activeTab === 'bookshelf') {
+    if (!currentUser) {
+      document.getElementById('grid').innerHTML='<div class="empty"><div class="icon">🔒</div><div>'+t.loginToViewBookshelf+'</div></div>';
+      document.getElementById('resultsInfo').innerHTML = '';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+    const params = new URLSearchParams({q});
+    const resp = await fetch(API_BASE + '/api/bookshelf?' + params);
+    if (!resp.ok) {
+      const shelfErr = currentLang === 'vi' ? 'Không thể tải tủ sách' : (currentLang === 'zh' ? '无法加载书架' : 'Unable to load bookshelf');
+      document.getElementById('grid').innerHTML='<div class="empty"><div class="icon">⚠️</div><div>'+shelfErr+'</div></div>';
+      return;
+    }
+    const books = await resp.json();
+    document.getElementById('resultsInfo').innerHTML = '<strong>' + books.length + '</strong> ' + t.booksInShelf;
+    document.getElementById('pagination').innerHTML = '';
+    renderGrid(books.map(b => ({
+      id: b.book_id,
+      title_vietphrase: b.title,
+      author_hanviet: b.author,
+      cover: b.cover,
+      url: b.url,
+      site_count: 1
+    })));
+  } else if (activeTab === 'history') {
+    if (!currentUser) {
+      document.getElementById('grid').innerHTML='<div class="empty"><div class="icon">🔒</div><div>'+t.loginToViewHistory+'</div></div>';
+      document.getElementById('resultsInfo').innerHTML = '';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+    const params = new URLSearchParams({q});
+    const resp = await fetch(API_BASE + '/api/history?' + params);
+    if (!resp.ok) {
+      const histErr = currentLang === 'vi' ? 'Không thể tải lịch sử' : (currentLang === 'zh' ? '无法加载历史记录' : 'Unable to load history');
+      document.getElementById('grid').innerHTML='<div class="empty"><div class="icon">⚠️</div><div>'+histErr+'</div></div>';
+      return;
+    }
+    const groups = await resp.json();
+    let histCount = 0;
+    groups.forEach(g => histCount += g.books.length);
+    document.getElementById('resultsInfo').innerHTML = t.readHistoryCount + ' (' + histCount + ') ' +
+      '<button class="btn btn-outline" onclick="clearHistory()" style="margin-left:12px;padding:4px 8px;font-size:0.75rem;">'+t.clearHistoryBtn+'</button>';
+    document.getElementById('pagination').innerHTML = '';
+    renderHistoryGrid(groups);
+  }
+}
+
+function renderGrid(books){
+  const grid = document.getElementById('grid');
+  const t = T[currentLang];
+  if(!books.length){ grid.innerHTML='<div class="empty"><div class="icon">🔎</div><div>'+t.empty+'</div></div>'; return; }
+  grid.innerHTML = books.map((b, idx) => {
+    const sites = (b.sources||'').split(', ').filter(Boolean).map(s=>
+      '<span class="badge badge-site">'+s+'</span>').join('');
+    const cats  = (b.categories||'').split(', ').filter(Boolean).map(c=> {
+      const translatedCat = t.cats[c] || c;
+      return '<span class="badge badge-cat">'+translatedCat+'</span>';
+    }).join('');
+    const dupSuffix = currentLang === 'vi' ? ' nguồn' : (currentLang === 'zh' ? '个来源' : ' sources');
+    const dupBadge = b.site_count>1
+      ? '<span class="badge badge-dup">🔗 '+b.site_count+dupSuffix+'</span>' : '';
+    const chInfo  = b.chapters_max
+      ? '<span><strong>'+t.chapters+':</strong> '+b.chapters_max.toLocaleString()+(b.chapters_max_source?' ('+b.chapters_max_source+')':'')+'</span>' : '';
+    const wcInfo  = b.word_count_max
+      ? '<span><strong>'+t.words+':</strong> '+b.word_count_max.toLocaleString()+'</span>' : '';
+    const cover   = b.cover
+      ? '<img class="cover-img" src="'+esc(b.cover)+'" onerror="this.remove()" loading="lazy">' : '';
+    const urls    = parseUrls(b.urls).map(u=>
+      '<a class="url-chip" href="'+esc(u.url)+'" target="_blank" onclick="recordReadHistory('+b.id+')">'+esc(u.site)+'↗</a>').join('');
+    
+    const displayTitle = esc(b.title_vietphrase || b.title);
+    const subTitle = b.id 
+      ? '<div class="card-subtitle" style="font-size:0.82rem;color:#a5b4fc;margin:2px 0 6px 0;">' +
+        'Hán Việt: ' + esc(b.title_hanviet || '—') + ' · Gốc: <span class="notranslate" translate="no" style="color:#64748b">' + esc(b.title) + '</span></div>'
+      : '<div class="card-subtitle" style="font-size:0.82rem;color:#a5b4fc;margin:2px 0 6px 0;">' + (currentLang === 'vi' ? 'Nguồn ngoài: ' : (currentLang === 'zh' ? '外部来源: ' : 'External: ')) + '<span style="color:#64748b;word-break:break-all;">' + esc(b.url || '—') + '</span></div>';
+    
+    const displayAuthor = '✍ ' + esc(b.author_hanviet || b.author || '—') + 
+      (b.id ? ' <span class="notranslate" translate="no" style="color:#64748b;font-size:0.8rem;">(' + esc(b.author || '—') + ')</span>' : '');
+
+    const descText = b.description_vietphrase || b.description || '';
+    const desc = descText ? '<p class="card-desc" title="'+esc(b.description)+'">'+esc(descText)+'</p>' : '';
+    
+    let actionButtons = '';
+    if (b.id) {
+      const inShelf = bookshelfIds.has(b.id);
+      const favButtonHtml = currentUser
+        ? `<button class="btn-fav ${inShelf ? 'active' : ''}" onclick="toggleFav(event, ${b.id})">⭐ ${inShelf ? t.inBookshelf : t.addBookshelf}</button>`
+        : '';
+      actionButtons = `
+        <button class="btn-compare" onclick="toggleCompare(${b.id})" style="margin-top:10px;background:rgba(99,102,241,0.1);color:#a5b4fc;border:1px solid rgba(99,102,241,0.2);padding:6.5px 10px;font-size:0.75rem;border-radius:6px;cursor:pointer;width:100%;text-align:center;font-weight:500;transition:0.2s;">${t.compareBtn}</button>
+        ${favButtonHtml}
+        <div class="compare-box" id="compare-box-${b.id}" style="display:none;margin-top:10px;background:#0f101f;border:1px solid #1e1e3a;border-radius:8px;padding:10px;font-size:0.8rem;text-align:left;"></div>
+      `;
+    } else {
+      // External website novel
+      const favButtonHtml = currentUser
+        ? `<button class="btn-fav active" onclick="removeExternalFav(event, '${esc(b.url)}')">⭐ ${t.removeExternal}</button>`
+        : '';
+      actionButtons = `
+        <a class="btn-compare" href="${esc(b.url)}" target="_blank" style="margin-top:10px;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.25);padding:6.5px 10px;font-size:0.75rem;border-radius:6px;text-decoration:none;display:block;width:100%;text-align:center;font-weight:500;transition:0.2s;">${t.readExternal}</a>
+        ${favButtonHtml}
+      `;
+    }
+
+    const cardId = b.id ? 'book-card-' + b.id : 'book-card-ext-' + idx;
+
+    return '<div class="card notranslate" translate="no" id="'+cardId+'"><div class="card-top">'+cover+
+      '<div class="card-body"><div class="card-title">'+displayTitle+'</div>'+
+      subTitle+
+      '<div class="card-author">'+displayAuthor+'</div>'+
+      (b.id ? '<div class="card-meta">'+dupBadge+sites+cats+'</div>' : '') +
+      (b.id ? '<div class="card-info">'+chInfo+wcInfo+'</div>' : '') +
+      desc+
+      (b.id ? '<div class="card-urls" style="margin-top:8px;">'+urls+'</div>' : '') +
+      actionButtons +
+      '</div></div></div>';
+  }).join('');
+}
+
+function renderHistoryGrid(groups) {
+  const grid = document.getElementById('grid');
+  const t = T[currentLang];
+  if(!groups.length){ grid.innerHTML='<div class="empty"><div class="icon">⏳</div><div>'+t.emptyHistory+'</div></div>'; return; }
+  
+  grid.innerHTML = groups.map(g => {
+    const booksHtml = g.books.map((b, idx) => {
+      const cover = b.cover
+        ? '<img class="cover-img" src="'+esc(b.cover)+'" onerror="this.remove()" loading="lazy">' : '';
+      
+      let actionButtons = '';
+      if (b.book_id) {
+        const inShelf = bookshelfIds.has(b.book_id);
+        actionButtons = `
+          <button class="btn-compare" onclick="toggleCompare(${b.book_id})" style="flex:1;background:rgba(99,102,241,0.1);color:#a5b4fc;border:1px solid rgba(99,102,241,0.2);padding:6.5px 10px;font-size:0.75rem;border-radius:6px;cursor:pointer;font-weight:500;transition:0.2s;">${t.readBtn}</button>
+          <button class="btn-fav ${inShelf ? 'active' : ''}" onclick="toggleFav(event, ${b.book_id})" style="margin-top:0; width:auto; padding:6.5px 12px;" title="${inShelf ? t.removeExternal : t.addBookshelf}">⭐</button>
+        `;
+      } else {
+        const readLabel = currentLang === 'vi' ? 'Đọc ↗' : (currentLang === 'zh' ? '阅读 ↗' : 'Read ↗');
+        actionButtons = `
+          <a class="btn-compare" href="${esc(b.url)}" target="_blank" style="flex:1;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.25);padding:6.5px 10px;font-size:0.75rem;border-radius:6px;text-decoration:none;display:block;text-align:center;font-weight:500;transition:0.2s;">📖 ${readLabel}</a>
+        `;
+      }
+
+      const cardId = b.book_id ? 'book-card-hist-' + b.book_id : 'book-card-hist-ext-' + idx;
+      const compareBoxId = b.book_id ? 'compare-box-' + b.book_id : 'compare-box-ext-' + idx;
+
+      return '<div class="card notranslate" translate="no" id="'+cardId+'"><div class="card-top">'+cover+
+        '<div class="card-body"><div class="card-title">'+esc(b.title)+'</div>'+
+        '<div class="card-author">✍ '+esc(b.author)+'</div>'+
+        '<div style="font-size:0.8rem;color:#64748b;margin-top:6px;">'+t.lastView+': <span style="color:#a5b4fc">'+esc(b.last_chapter)+'</span></div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px;">'+
+          actionButtons +
+        '</div>'+
+        (b.book_id ? '<div class="compare-box" id="'+compareBoxId+'" style="display:none;margin-top:10px;background:#0f101f;border:1px solid #1e1e3a;border-radius:8px;padding:10px;font-size:0.8rem;text-align:left;"></div>' : '') +
+        '</div></div></div>';
+    }).join('');
+    
+    return `<div style="grid-column:1/-1; width:100%; margin-top:20px;">
+      <h3 class="history-title">${esc(g.group_name)}</h3>
+      <div class="grid">${booksHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleCompare(bookId) {
+  const box = document.getElementById('compare-box-' + bookId);
+  if (box.style.display === 'block') {
+    box.style.display = 'none';
+    return;
+  }
+  
+  const t = T[currentLang];
+  box.style.display = 'block';
+  box.innerHTML = `<div style="color:#64748b;text-align:center;padding:10px;">${t.comparingText}</div>`;
+  
+  recordReadHistory(bookId);
+  
+  try {
+    const r = await fetch(API_BASE + '/api/book/' + bookId + '/translations');
+    const d = await r.json();
+    
+    box.innerHTML = `
+      <div class="compare-item">
+        <div class="compare-label">${t.compFast}</div>
+        <div class="compare-val"><strong>${esc(d.fast.title || '—')}</strong><br/><span style="color:#94a3b8;font-size:0.75rem">${esc(d.fast.desc || '—')}</span></div>
+      </div>
+      <div class="compare-item" style="border-top:1px solid #1e1e3a;padding-top:6px;margin-top:6px;">
+        <div class="compare-label">${t.compAdvanced}</div>
+        <div class="compare-val"><strong>${esc(d.advanced.title || '—')}</strong><br/><span style="color:#94a3b8;font-size:0.75rem">${esc(d.advanced.desc || '—')}</span></div>
+      </div>
+      <div class="compare-item" style="border-top:1px solid #1e1e3a;padding-top:6px;margin-top:6px;">
+        <div class="compare-label">${t.compVietphrase}</div>
+        <div class="compare-val"><strong>${esc(d.vietphrase.title || '—')}</strong><br/><span style="color:#94a3b8;font-size:0.75rem">${esc(d.vietphrase.desc || '—')}</span></div>
+      </div>
+      <div class="compare-item" style="border-top:1px solid #1e1e3a;padding-top:6px;margin-top:6px;">
+        <div class="compare-label">${t.compHanviet}</div>
+        <div class="compare-val"><strong>${esc(d.hanviet.title || '—')}</strong><br/><span style="color:#94a3b8;font-size:0.75rem">${esc(d.hanviet.desc || '—')}</span></div>
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div style="color:#ef4444;text-align:center;padding:10px;">${t.compError}</div>`;
+  }
+}
+
+function parseUrls(urlsStr){
+  if(!urlsStr) return [];
+  return urlsStr.split(' | ').map(p=>{
+    const idx = p.indexOf(': ');
+    if(idx<0) return null;
+    return {site: p.slice(0,idx), url: p.slice(idx+2)};
+  }).filter(Boolean);
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderPagination(){
+  const pg = document.getElementById('pagination');
+  if(totalPages<=1 || activeTab !== 'all'){ pg.innerHTML=''; return; }
+  let html='';
+  const prev = currentPage>1;
+  html += '<button class="page-btn" '+(prev?'':'disabled')+" onclick='goPage("+( currentPage-1)+")'>&laquo; Trước</button>";
+  let start = Math.max(1, currentPage-3), end = Math.min(totalPages, start+6);
+  if(start>1) html+="<button class='page-btn' onclick='goPage(1)'>1</button>"+(start>2?"<span style='color:#475569;padding:0 4px'>…</span>":'');
+  for(let p=start;p<=end;p++) html+="<button class='page-btn"+(p===currentPage?' active':'')+"' onclick='goPage("+p+")'>"+p+"</button>";
+  if(end<totalPages) html+=(end<totalPages-1?"<span style='color:#475569;padding:0 4px'>…</span>":"")+"<button class='page-btn' onclick='goPage("+totalPages+")'>"+totalPages+"</button>";
+  html += '<button class="page-btn" '+(currentPage<totalPages?'':'disabled')+" onclick='goPage("+(currentPage+1)+")'> Sau &raquo;</button>";
+  pg.innerHTML = html;
+}
+
+function goPage(p){ currentPage=p; doSearch(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+async function loadStats(){
+  const r = await fetch(API_BASE + '/api/stats');
+  const d = await r.json();
+  document.getElementById('statTotal').textContent = Number(d.total).toLocaleString();
+  document.getElementById('statDup').textContent   = Number(d.duplicates).toLocaleString();
+}
+
+function detectAndSetLanguage() {
+  const storedLang = localStorage.getItem('preferredLanguage');
+  if (storedLang && ['vi', 'en', 'zh'].includes(storedLang)) {
+    currentLang = storedLang;
+  } else {
+    const userLanguages = navigator.languages || [navigator.language || navigator.userLanguage];
+    let matched = false;
+    for (let lang of userLanguages) {
+      if (!lang) continue;
+      const shortLang = lang.substring(0, 2).toLowerCase();
+      if (['vi', 'en', 'zh'].includes(shortLang)) {
+        currentLang = shortLang;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      currentLang = 'vi';
+    }
+  }
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'lang-' + currentLang);
+  });
+}
+
+// Initial calls
+detectAndSetLanguage();
+updateUILanguage();
+checkAuth();
+loadStats();
+doSearch();
+</script>
+</body>
+</html>

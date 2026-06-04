@@ -1,0 +1,23 @@
+# Configuration for Chinese-Vietnamese Translation & Syntax Analysis
+
+project:
+  name: "CH-VN Grammar Translation Tool"
+  version: "1.0.0"
+
+paths:
+  dictionaries:
+    jieba_user_dict: "dictionaries/user_dict_jieba.txt"
+    underthesea_user_dict: "dictionaries/user_dict_underthesea.txt"
+    custom_grammar_rules: "config/grammar_rules.yaml"
+  models:
+    vncorenlp_dir: "models/vncorenlp"
+    hanlp_dir: "models/hanlp"
+
+analysis:
+  # Choose default Chinese parser: 'jieba' or 'hanlp'
+  chinese_parser: "jieba"
+  # Choose default Vietnamese parser: 'underthesea' or 'phonlp'
+  vietnamese_parser: "underthesea"
+  
+  # Enable logging of grammatical matching details
+  verbose: true

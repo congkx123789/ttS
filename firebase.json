@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "site": "learned-acronym-498316-h-a98d9",
+    "public": "Frontend/web-reader",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
