@@ -1,12 +1,4 @@
-import socket
-orig_getaddrinfo = socket.getaddrinfo
-def patched_getaddrinfo(host, port, *args, **kwargs):
-    if host == 'db.mrhddtyhuuwpttqlpplv.supabase.co':
-        # Route through IPv4-capable regional pooler utilizing SNI
-        return orig_getaddrinfo('aws-0-ap-south-1.pooler.supabase.com', port, *args, **kwargs)
-    return orig_getaddrinfo(host, port, *args, **kwargs)
-socket.getaddrinfo = patched_getaddrinfo
-
+import logging
 from flask import Flask, request, jsonify, render_template_string, session
 from flask_cors import CORS
 import sqlite3, math, os, sys, hashlib
@@ -22,9 +14,21 @@ from email.mime.multipart import MIMEMultipart
 
 load_dotenv()  # Load variables from .env
 
+# Structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("server")
+
 # Add quick_translator to path
 root_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(root_dir, "quick_translator"))
+
+# Import production database manager
+from db_manager import get_user_db_conn, init_user_db, health_check as db_health_check
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -48,94 +52,8 @@ DB = os.path.join(root_dir, "merged_books.db")
 USER_DB = os.path.join(root_dir, "users_data.db")
 
 # =============================================
-# POSTGRES COMPATIBILITY WRAPPERS FOR DATABASE SEPARATION
+# Database wrappers are now in db_manager.py
 # =============================================
-class PostgresCursorWrapper:
-    def __init__(self, pg_cursor, lastrowid=None):
-        self.pg_cursor = pg_cursor
-        self._lastrowid = lastrowid
-
-    def fetchone(self):
-        row = self.pg_cursor.fetchone()
-        if row is None:
-            return None
-        return row
-
-    def fetchall(self):
-        return self.pg_cursor.fetchall()
-
-    @property
-    def lastrowid(self):
-        return self._lastrowid
-
-class PostgresConnectionWrapper:
-    def __init__(self, pg_conn):
-        self.pg_conn = pg_conn
-
-    @property
-    def row_factory(self):
-        return None
-
-    @row_factory.setter
-    def row_factory(self, val):
-        pass
-
-    def execute(self, sql, parameters=None):
-        sql_upper = sql.upper()
-        
-        # Auto-convert SQLite queries to PostgreSQL syntax
-        if "CREATE TABLE" in sql_upper:
-            sql = sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
-            sql = sql.replace("CREATE TABLE IF NOT EXISTS IF NOT EXISTS", "CREATE TABLE IF NOT EXISTS")
-            sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-            sql = sql.replace("DATETIME DEFAULT CURRENT_TIMESTAMP", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-            sql = sql.replace("DATETIME", "TIMESTAMP")
-            sql = sql.replace("UNIQUE(user_id, book_id)", "CONSTRAINT unique_user_book UNIQUE(user_id, book_id)")
-            
-        sql = sql.replace('?', '%s')
-        
-        is_insert = sql.strip().upper().startswith("INSERT")
-        if is_insert and "RETURNING" not in sql.upper():
-            sql += " RETURNING id"
-            
-        import psycopg2.extras
-        cursor = self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        
-        if parameters:
-            cursor.execute(sql, parameters)
-        else:
-            if "CREATE TABLE" in sql_upper or "ALTER TABLE" in sql_upper:
-                try:
-                    cursor.execute("SAVEPOINT sp_ddl")
-                    cursor.execute(sql)
-                    cursor.execute("RELEASE SAVEPOINT sp_ddl")
-                except Exception as e:
-                    if "already exists" in str(e):
-                        cursor.execute("ROLLBACK TO SAVEPOINT sp_ddl")
-                        cursor.execute("RELEASE SAVEPOINT sp_ddl")
-                    else:
-                        cursor.execute("ROLLBACK TO SAVEPOINT sp_ddl")
-                        cursor.execute("RELEASE SAVEPOINT sp_ddl")
-                        raise
-            else:
-                cursor.execute(sql)
-            
-        lastrowid = None
-        if is_insert:
-            try:
-                row = cursor.fetchone()
-                if row:
-                    lastrowid = row[0]
-            except Exception:
-                pass
-                
-        return PostgresCursorWrapper(cursor, lastrowid)
-
-    def commit(self):
-        self.pg_conn.commit()
-
-    def close(self):
-        self.pg_conn.close()
 
 # =============================================
 # JWT AUTHENTICATION CONFIG
@@ -306,117 +224,7 @@ def is_vip_request():
             
     return False
 
-def init_user_db():
-    conn = get_user_db_conn()
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password_hash TEXT,
-        email TEXT,
-        phone TEXT,
-        google_id TEXT,
-        vip_status INTEGER DEFAULT 0,
-        vip_plan TEXT,
-        vip_expiry DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS bookshelf (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        book_id INTEGER,
-        title TEXT,
-        cover TEXT,
-        author TEXT,
-        url TEXT,
-        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, book_id)
-    )
-    """)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS reading_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        book_id INTEGER,
-        title TEXT,
-        cover TEXT,
-        author TEXT,
-        last_chapter TEXT,
-        read_date TEXT,
-        url TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, book_id)
-    )
-    """)
-    
-    # Payments table for VIP subscriptions
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        order_id TEXT UNIQUE NOT NULL,
-        plan TEXT NOT NULL,
-        amount INTEGER NOT NULL,
-        status TEXT DEFAULT 'pending',
-        payment_method TEXT DEFAULT 'vietqr',
-        note TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        completed_at DATETIME,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
-    
-    # Password reset tokens
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        token TEXT UNIQUE NOT NULL,
-        expires_at DATETIME NOT NULL,
-        used INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
-    
-    # Refresh tokens for JWT auth
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        token TEXT UNIQUE NOT NULL,
-        expires_at DATETIME NOT NULL,
-        revoked INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
-    
-    # Safely migrate existing databases — add new columns if they don't exist yet
-    for table in ["bookshelf", "reading_history"]:
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN url TEXT")
-        except Exception:
-            pass # column already exists
-    
-    # Migrate users table with new columns
-    new_user_cols = [
-        ("email", "TEXT"),
-        ("phone", "TEXT"),
-        ("google_id", "TEXT"),
-        ("vip_plan", "TEXT"),
-        ("vip_expiry", "DATETIME"),
-    ]
-    for col_name, col_type in new_user_cols:
-        try:
-            conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
-        except Exception:
-            pass  # column already exists
-            
-    conn.commit()
-    conn.close()
+# init_user_db() is now in db_manager.py
 
 # =============================================
 # JWT TOKEN HELPERS
@@ -587,17 +395,7 @@ def activate_vip(user_id, plan):
     conn.close()
     return True
 
-def get_user_db_conn():
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url:
-        import psycopg2
-        import psycopg2.extras
-        conn = psycopg2.connect(db_url)
-        return PostgresConnectionWrapper(conn)
-    else:
-        conn = sqlite3.connect(USER_DB)
-        conn.row_factory = sqlite3.Row
-        return conn
+# get_user_db_conn() is now in db_manager.py
 
 HTML = ""
 
@@ -2420,23 +2218,32 @@ def start_email_polling_worker():
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
 
-if __name__ == "__main__":
-    try:
-        init_user_db()
-        print("✔ Database initialized successfully.")
-    except Exception as e:
-        print("❌ Cannot initialize database:", e)
+# =============================================
+# HEALTH CHECK ENDPOINT
+# =============================================
+@app.route('/health', methods=['GET'])
+def health_endpoint():
+    """Production health check — used by Docker HEALTHCHECK and monitoring."""
+    status = db_health_check()
+    http_code = 200 if status["status"] in ("healthy", "degraded") else 503
+    return jsonify(status), http_code
 
+# Auto-initialize database tables when imported/started
+try:
+    init_user_db()
+except Exception as e:
+    logger.error(f"⚠️ Auto database initialization failed: {e}")
+
+if __name__ == "__main__":
     if not os.path.exists(DB):
-        print("Loi: Khong tim thay", DB)
-        print("Hay chay build_viewer_db.py truoc.")
+        logger.error(f"Loi: Khong tim thay {DB}")
+        logger.error("Hay chay build_viewer_db.py truoc.")
     else:
         try:
             start_email_polling_worker()
         except Exception as e:
-            print("❌ Cannot start email polling worker:", e)
-            
-        print("Server dang chay tai: http://localhost:5051")
-        print("Nhan Ctrl+C de dung.")
-        app.run(host="0.0.0.0", port=5051, debug=False, threaded=True)
+            logger.error(f"❌ Cannot start email polling worker: {e}")
 
+        logger.info("Server dang chay tai: http://localhost:5051")
+        logger.info("Nhan Ctrl+C de dung.")
+        app.run(host="0.0.0.0", port=5051, debug=False, threaded=True)
