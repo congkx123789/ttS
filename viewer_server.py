@@ -777,30 +777,25 @@ def api_books():
             else:  # all or fallback
                 where.append("(title LIKE ? OR author LIKE ? OR description LIKE ?)")
                 params += [pq, pq, pq]
-        else:
             # Vietnamese / alphanumeric search: clean query
             q_clean = clean_vietnamese_query(q)
             fts_query = q_clean.replace('"', '').replace("'", '')
             if fts_query:
-                fts_terms = fts_query.strip().split()
-                # Wrap each term in quotes for phrase / exact word matching
-                fts_match = " ".join(f'"{t}"' for t in fts_terms if t)
-                
                 if search_field == "title":
                     where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = " OR ".join(f"title:{t} OR title_hanviet_clean:{t} OR title_vietphrase_clean:{t}" for t in fts_terms if t)
+                    match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}"'
                     params.append(match_expr)
                 elif search_field == "author":
                     where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = " OR ".join(f"author:{t} OR author_hanviet_clean:{t}" for t in fts_terms if t)
+                    match_expr = f'author_hanviet_clean:"{fts_query}"'
                     params.append(match_expr)
                 elif search_field == "hanviet":
                     where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = " OR ".join(f"title_hanviet_clean:{t} OR author_hanviet_clean:{t}" for t in fts_terms if t)
+                    match_expr = f'title_hanviet_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
                     params.append(match_expr)
                 elif search_field == "vietphrase":
                     where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = " OR ".join(f"title_vietphrase_clean:{t}" for t in fts_terms if t)
+                    match_expr = f'title_vietphrase_clean:"{fts_query}"'
                     params.append(match_expr)
                 elif search_field == "chinese":
                     where.append("(title LIKE ? OR author LIKE ?)")
@@ -812,7 +807,8 @@ def api_books():
                     params += [pq, pq, pq]
                 else:  # all fields (default)
                     where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    params.append(fts_match)
+                    match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
+                    params.append(match_expr)
 
     if category:
         where.append("categories LIKE ?")
@@ -834,8 +830,35 @@ def api_books():
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
+    # Build dynamic order by clause if search query is active
+    order_by_sql = sort
+    order_params = []
+    if q:
+        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in q)
+        if has_chinese:
+            order_by_sql = f"""
+                CASE 
+                    WHEN title = ? THEN 1
+                    WHEN title LIKE ? THEN 2
+                    ELSE 3
+                END ASC, {sort}
+            """
+            order_params = [q, q + "%"]
+        else:
+            q_clean = clean_vietnamese_query(q)
+            fts_query = q_clean.replace('"', '').replace("'", '')
+            if fts_query:
+                order_by_sql = f"""
+                    CASE 
+                        WHEN title_hanviet_clean = ? OR title_vietphrase_clean = ? THEN 1
+                        WHEN title_hanviet_clean LIKE ? OR title_vietphrase_clean LIKE ? THEN 2
+                        ELSE 3
+                    END ASC, {sort}
+                """
+                order_params = [fts_query, fts_query, fts_query + "%", fts_query + "%"]
+
     # Check cache for identical search results to save database queries
-    cache_key = (where_sql, sort, page, per_page, tuple(params))
+    cache_key = (where_sql, order_by_sql, page, per_page, tuple(params), tuple(order_params))
     cached_res = query_cache.get(cache_key)
     if cached_res is not None:
         return jsonify(cached_res)
@@ -861,9 +884,9 @@ def api_books():
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM books " + where_sql +
-        " ORDER BY " + sort +
+        " ORDER BY " + order_by_sql +
         " LIMIT ? OFFSET ?",
-        params + [per_page, offset]
+        params + order_params + [per_page, offset]
     ).fetchall()
 
     # 3. No enrichment here! Return the basic rows from the active database directly
@@ -2121,6 +2144,7 @@ def translate():
             
         translation_limit_tracker[tracker_key] = current_count + requested_count
         
+    mode = data.get('mode')
     translations = []
     eng = get_engine()
     for text in texts:
@@ -2128,7 +2152,7 @@ def translate():
             translations.append(text)
         else:
             try:
-                trans = eng.translate(text, multi_option=False)
+                trans = eng.translate(text, multi_option=False, mode=mode)
                 translations.append(trans)
             except Exception as e:
                 print(f"Error translating: {e}")
