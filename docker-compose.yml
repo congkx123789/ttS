@@ -34,3 +34,17 @@ services:
       - ./nginx/letsencrypt:/etc/letsencrypt
     depends_on:
       - backend
+
+  email-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: email-worker
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./users_data.db:/app/users_data.db
+    command: ["python", "email_service.py"]
+    depends_on:
+      - backend

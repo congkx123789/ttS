@@ -386,3 +386,12 @@ def process_local_payment(order_id, amount):
     except Exception as e:
         print(f"❌ Error processing local payment: {e}")
         return False
+
+if __name__ == "__main__":
+    print("🚀 [Email Worker] Starting standalone email polling daemon...")
+    while True:
+        try:
+            check_bank_emails_and_process()
+        except Exception as e:
+            print(f"❌ [Email Worker] Error: {e}")
+        time.sleep(15)
