@@ -286,7 +286,8 @@ def is_vip_request():
         return True
         
     # 5. Check user database record if logged in
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if user_id:
         try:
             conn = get_user_db_conn()
@@ -484,6 +485,18 @@ def get_current_user():
     """Get current user from JWT or session."""
     if hasattr(request, '_jwt_user'):
         return request._jwt_user
+        
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        payload = verify_access_token(token)
+        if payload:
+            return {
+                "id": payload["sub"],
+                "username": payload["username"],
+                "vip_status": payload["vip"]
+            }
+            
     if "user_id" in session:
         return {
             "id": session["user_id"],
@@ -700,8 +713,12 @@ def clean_vietnamese_query(text):
 
 @app.route("/")
 def index():
-    from flask import redirect
-    return redirect("https://tienhiep.lyvuha.com")
+    import os
+    index_path = os.path.join(root_dir, "Frontend", "web-reader", "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Web Reader Frontend not found.", 404
 
 @app.route("/api/stats")
 def api_stats():
@@ -920,7 +937,7 @@ def api_book_translations(book_id):
 
 @app.route("/api/auth/register", methods=["POST"])
 def auth_register():
-    ip = request.remote_addr
+    ip = get_client_ip()
     if check_rate_limit("register", ip):
         return jsonify({"error": "Bạn đã đăng ký quá nhiều lần. Vui lòng thử lại sau 10 phút."}), 429
     
@@ -955,7 +972,7 @@ def auth_register():
 
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
-    ip = request.remote_addr
+    ip = get_client_ip()
     if check_rate_limit("login", ip):
         return jsonify({"error": "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 5 phút."}), 429
     
@@ -1006,7 +1023,7 @@ def auth_login():
 
 @app.route("/api/auth/forgot-password", methods=["POST"])
 def auth_forgot_password():
-    ip = request.remote_addr
+    ip = get_client_ip()
     if check_rate_limit("otp", ip):
         return jsonify({"error": "Bạn đã yêu cầu OTP quá nhiều lần. Vui lòng thử lại sau 1 phút."}), 429
 
@@ -1336,7 +1353,8 @@ def api_payment_plans():
 @app.route("/api/payment/create", methods=["POST"])
 def api_payment_create():
     """Create a new payment order and generate VietQR code."""
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     
     # Also support JWT auth
     auth_header = request.headers.get("Authorization", "")
@@ -1348,7 +1366,7 @@ def api_payment_create():
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập để mua VIP."}), 401
     
-    ip = request.remote_addr
+    ip = get_client_ip()
     if check_rate_limit("payment", ip):
         return jsonify({"error": "Bạn đã tạo quá nhiều đơn hàng. Vui lòng thử lại sau."}), 429
     
@@ -1463,7 +1481,8 @@ def api_payment_create():
 @app.route("/api/payment/status/<order_id>", methods=["GET"])
 def api_payment_status(order_id):
     """Check payment status (for polling from client)."""
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -1649,7 +1668,8 @@ def api_payment_confirm_manual():
 @app.route("/api/payment/history", methods=["GET"])
 def api_payment_history():
     """Get payment history for the current user."""
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -1674,7 +1694,8 @@ def api_payment_history():
 @app.route("/api/user/vip-status", methods=["GET"])
 def api_user_vip_status():
     """Get detailed VIP status for current user."""
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -1714,7 +1735,8 @@ def api_user_vip_status():
 
 @app.route("/api/bookshelf", methods=["GET"])
 def get_bookshelf():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
     
@@ -1738,7 +1760,8 @@ def get_bookshelf():
 
 @app.route("/api/bookshelf/add", methods=["POST"])
 def add_bookshelf():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
         
@@ -1782,7 +1805,8 @@ def add_bookshelf():
 
 @app.route("/api/bookshelf/remove", methods=["POST"])
 def remove_bookshelf():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
     data = request.json or {}
@@ -1802,7 +1826,8 @@ def remove_bookshelf():
 
 @app.route("/api/history", methods=["GET"])
 def get_history():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
     
@@ -1856,7 +1881,8 @@ def get_history():
 
 @app.route("/api/history/add", methods=["POST"])
 def add_history():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
         
@@ -1892,7 +1918,8 @@ def add_history():
 
 @app.route("/api/history/clear", methods=["POST"])
 def clear_history():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập."}), 401
     conn = get_user_db_conn()
@@ -1904,7 +1931,8 @@ def clear_history():
 
 @app.route("/api/extension/sync", methods=["POST"])
 def extension_sync():
-    user_id = session.get("user_id")
+    user = get_current_user()
+    user_id = user["id"] if user else None
     if not user_id:
         return jsonify({"error": "Vui lòng đăng nhập trên website chính."}), 401
         
@@ -2079,7 +2107,7 @@ def translate():
     # 50-paragraph rate-limit for Standard users
     if not is_vip_request():
         import datetime
-        client_ip = request.remote_addr or "127.0.0.1"
+        client_ip = get_client_ip()
         today_str = datetime.date.today().isoformat()
         tracker_key = f"{client_ip}:{today_str}"
         
