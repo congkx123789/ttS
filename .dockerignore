@@ -1,0 +1,34 @@
+# Ignore large files during docker build
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.zip
+*.csv
+*.json
+!firebase.json
+*.epub
+*.log
+*.png
+*.jpg
+*.txt
+!requirements.txt
+
+# Directories
+.git
+.venv
+venv
+env
+__pycache__
+dictionaries/
+dictionaries_downloaded/
+dictionaries_new/
+dictionaries_vietnamese/
+quick_translator/
+Frontend/
+ocr-reader-extension/
+ocr_reader_extension_advanced/
+gui/
+v1/
+Test dich/
+google-cloud-sdk/
