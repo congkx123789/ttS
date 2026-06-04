@@ -1,8 +1,12 @@
-"""
-viewer_server.py — Web viewer cho merged_books.db
-Chạy: python viewer_server.py
-Truy cập: http://localhost:5050
-"""
+import socket
+orig_getaddrinfo = socket.getaddrinfo
+def patched_getaddrinfo(host, port, *args, **kwargs):
+    if host == 'db.mrhddtyhuuwpttqlpplv.supabase.co':
+        # Route through IPv4-capable regional pooler utilizing SNI
+        return orig_getaddrinfo('aws-0-ap-south-1.pooler.supabase.com', port, *args, **kwargs)
+    return orig_getaddrinfo(host, port, *args, **kwargs)
+socket.getaddrinfo = patched_getaddrinfo
+
 from flask import Flask, request, jsonify, render_template_string, session
 from flask_cors import CORS
 import sqlite3, math, os, sys, hashlib
