@@ -579,6 +579,7 @@ def api_books():
             else:  # all or fallback
                 where.append("(title LIKE ? OR author LIKE ? OR description LIKE ?)")
                 params += [pq, pq, pq]
+        else:
             # Vietnamese / alphanumeric search: clean query
             q_clean = clean_vietnamese_query(q)
             fts_query = q_clean.replace('"', '').replace("'", '')
