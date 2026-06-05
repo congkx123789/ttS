@@ -104,8 +104,29 @@ async function requestTranslationStream(texts, onChunk, onComplete) {
 // ============================================================
 function applyChunk(node, translation) {
     if (!translation || !node || !node.parentNode) return;
-    node.nodeValue = translation;
+    
     translatedNodes.add(node);
+    
+    // Nếu text quá ngắn, hiển thị luôn lập tức
+    if (translation.length < 5) {
+        node.nodeValue = translation;
+        return;
+    }
+
+    // Hiệu ứng Typewriter bắn từng chữ
+    const words = translation.split(/(?<=\s+)/);
+    node.nodeValue = "";
+    
+    let i = 0;
+    function typeWriter() {
+        if (i < words.length) {
+            node.nodeValue += words[i];
+            i++;
+            // Bắn chữ liên tục với tốc độ cao (5-10ms mỗi chữ)
+            requestAnimationFrame(() => setTimeout(typeWriter, 5));
+        }
+    }
+    typeWriter();
 }
 
 // ============================================================
