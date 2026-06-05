@@ -532,8 +532,9 @@ function fallbackToOffline(texts, mode, sendResponse) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_TRANSLATE") {
-        chrome.storage.local.get(['settings'], (result) => {
+        chrome.storage.local.get(['settings', 'serverAuthToken'], (result) => {
             const settings = result.settings || {};
+            const token = result.serverAuthToken;
             const engineType = settings.engineType || 'browser';
             const mode = settings.mode || 'advanced';
             
@@ -542,12 +543,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } else {
                 getBackendHost(settings).then((host) => {
                     if (host) {
+                        const headers = {
+                            "Content-Type": "application/json",
+                            "X-VIP-Key": settings.vipKey || ""
+                        };
+                        if (token) {
+                            headers['Authorization'] = `Bearer ${token}`;
+                        }
+
                         fetch(`${host}/translate`, {
                             method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "X-VIP-Key": settings.vipKey || ""
-                            },
+                            headers: headers,
                             body: JSON.stringify({ 
                                 texts: request.payload.texts,
                                 mode: mode,
@@ -635,6 +641,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse({ success: true, local: true });
             }
         });
+        return true; // Keep async channel open for SYNC_HISTORY
     } else if (request.action === "SYNC_WEB_AUTH") {
         const { token, user } = request.payload;
         if (token && user) {

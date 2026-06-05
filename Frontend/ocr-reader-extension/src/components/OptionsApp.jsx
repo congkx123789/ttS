@@ -827,7 +827,12 @@ export default function OptionsApp() {
                   </h3>
                   {serverUser && (
                     <button 
-                      onClick={handleLogout}
+                      onClick={() => {
+                        if (typeof chrome !== 'undefined' && chrome.storage) {
+                          chrome.storage.local.remove(['serverUser', 'serverAuthToken', 'serverRefreshToken']);
+                          window.location.reload();
+                        }
+                      }}
                       className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                     >
                       <span className="material-symbols-outlined text-[14px]">logout</span>
