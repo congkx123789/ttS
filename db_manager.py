@@ -211,8 +211,13 @@ def _try_postgres_connect():
 
 
 def _get_sqlite_conn():
-    """Return a local SQLite connection (always works)."""
-    conn = sqlite3.connect(USER_DB_PATH)
+    """Return a local SQLite connection (always works) optimized for concurrency."""
+    conn = sqlite3.connect(USER_DB_PATH, timeout=10)
+    # Enable Write-Ahead Logging for high concurrency
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA cache_size=-64000;") # 64MB cache
+    conn.execute("PRAGMA temp_store=MEMORY;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -436,6 +441,12 @@ def init_user_db():
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
             except Exception:
                 pass
+
+        # Create Indexes for fast retrieval
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reading_history_user_id ON reading_history(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reading_history_url ON reading_history(url)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookshelf_user_id ON bookshelf(user_id)")
 
         conn.commit()
         logger.info("✔ Database initialized successfully (with API Store tables).")

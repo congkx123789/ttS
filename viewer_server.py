@@ -34,6 +34,14 @@ from db_manager import get_user_db_conn, init_user_db, health_check as db_health
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "tienhiep_lyvuha_secret_key_9988")
 
+# Initialize Compression to reduce JSON response size by ~90%
+try:
+    from flask_compress import Compress
+    Compress(app)
+    logger.info("✔ Flask-Compress activated (GZIP/Brotli).")
+except ImportError:
+    logger.warning("⚠ Flask-Compress not installed. Run: pip install Flask-Compress")
+
 # Dynamic CORS handling supporting Credentials (Cookies/Sessions) for Chrome Extension and Web Frontend
 @app.after_request
 def handle_cors_and_credentials(response):
