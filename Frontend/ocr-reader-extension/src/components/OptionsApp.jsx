@@ -357,6 +357,7 @@ export default function OptionsApp() {
   };
   
   const [history, setHistory] = useState([]);
+  const [serverUser, setServerUser] = useState(null);
   const [saveStatus, setSaveStatus] = useState('');
 
   // VIP EPUB States
@@ -613,7 +614,7 @@ export default function OptionsApp() {
   // Load settings from chrome.storage.local on mount
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.get(['settings', 'offlineTranslationHistory', 'serverUrl'], (result) => {
+      chrome.storage.local.get(['settings', 'offlineTranslationHistory', 'serverUrl', 'serverUser'], (result) => {
         let loadedSettings = null;
         if (result.settings) {
           setSettings(prev => {
@@ -626,6 +627,10 @@ export default function OptionsApp() {
         }
         const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
         syncVipStatus(host);
+        
+        if (result.serverUser) {
+          setServerUser(result.serverUser);
+        }
       });
     } else {
       // Dev/fallback mode
@@ -643,6 +648,17 @@ export default function OptionsApp() {
       ]);
       const host = (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
       syncVipStatus(host);
+    }
+
+    // Add storage change listener to sync login state across tabs
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const listener = (changes, namespace) => {
+        if (namespace === 'local' && changes.serverUser !== undefined) {
+          setServerUser(changes.serverUser.newValue || null);
+        }
+      };
+      chrome.storage.onChanged.addListener(listener);
+      return () => chrome.storage.onChanged.removeListener(listener);
     }
   }, []);
 
@@ -802,6 +818,58 @@ export default function OptionsApp() {
           {activeTab === 'general' && (
             <div className="max-w-3xl space-y-6">
               
+              {/* Card Tài khoản (Account) */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-500">account_circle</span>
+                    Tài khoản đồng bộ (Account Sync)
+                  </h3>
+                  {serverUser && (
+                    <button 
+                      onClick={handleLogout}
+                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">logout</span>
+                      Đăng xuất
+                    </button>
+                  )}
+                </div>
+                
+                {serverUser ? (
+                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
+                        {serverUser.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-800">{serverUser.username}</span>
+                        <span className="text-[11px] text-gray-500">{serverUser.email || 'Không có email'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold px-2 py-1 bg-blue-100 text-blue-700 rounded-md inline-block">
+                        {serverUser.vip_status === 1 ? '👑 VIP Member' : 'Standard Member'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Bạn chưa đăng nhập. Để đồng bộ Tủ sách và Lịch sử đọc lên Cloud, hoặc sử dụng tài khoản VIP, vui lòng mở trang web chính thức để Đăng nhập / Đăng ký.
+                    </p>
+                    <a 
+                      href={settings.apiHost || "https://tienhiep.lyvuha.com"} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 h-9 px-4 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Mở trang web để đăng nhập <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+
               {/* Card Quyền thành viên */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
                 <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
