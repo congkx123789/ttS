@@ -591,17 +591,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; // Keep asynchronous channel open
     } else if (request.action === "SYNC_HISTORY") {
         // Read user session from storage to determine if online or offline
-        chrome.storage.local.get(['serverUser', 'serverUrl'], (storageRes) => {
+        chrome.storage.local.get(['serverUser', 'serverUrl', 'serverAuthToken', 'offlineTranslationHistory'], (storageRes) => {
             const user = storageRes.serverUser;
+            const token = storageRes.serverAuthToken;
             const serverUrl = storageRes.serverUrl || "https://tienhiep.lyvuha.com";
 
-            if (user) {
+            // Always save locally first as a reliable backup
+            let history = storageRes.offlineTranslationHistory || [];
+            history = history.filter(item => item.url !== request.payload.url);
+            history.unshift({
+                title: request.payload.title,
+                url: request.payload.url,
+                author: request.payload.author || "Không rõ",
+                cover: request.payload.cover || "",
+                last_chapter: request.payload.last_chapter || "Chương đọc",
+                timestamp: Date.now()
+            });
+            if (history.length > 20) history = history.slice(0, 20);
+            chrome.storage.local.set({ offlineTranslationHistory: history });
+
+            if (user && token) {
                 // User is logged in -> Sync online (SQLite database)
+                const headers = { "Content-Type": "application/json" };
+                headers['Authorization'] = `Bearer ${token}`;
+
                 fetch(`${serverUrl}/api/extension/sync`, {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: headers,
                     body: JSON.stringify(request.payload),
                     credentials: "include"
                 })
@@ -615,24 +631,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     sendResponse({ success: false, error: err.message });
                 });
             } else {
-                // User is not logged in -> Store in offlineTranslationHistory
-                chrome.storage.local.get(['offlineTranslationHistory'], (result) => {
-                    let history = result.offlineTranslationHistory || [];
-                    history = history.filter(item => item.url !== request.payload.url);
-                    history.unshift({
-                        title: request.payload.title,
-                        url: request.payload.url,
-                        author: request.payload.author || "Không rõ",
-                        cover: request.payload.cover || "",
-                        last_chapter: request.payload.last_chapter || "Chương đọc",
-                        timestamp: Date.now()
-                    });
-                    if (history.length > 20) history = history.slice(0, 20);
-                    chrome.storage.local.set({ offlineTranslationHistory: history }, () => {
-                        console.log("[Sync History Offline Success] Saved locally.");
-                        sendResponse({ success: true, local: true });
-                    });
-                });
+                console.log("[Sync History Offline Success] Saved locally.");
+                sendResponse({ success: true, local: true });
             }
         });
     } else if (request.action === "SYNC_WEB_AUTH") {
