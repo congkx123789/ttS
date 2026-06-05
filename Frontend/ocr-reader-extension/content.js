@@ -758,3 +758,19 @@ if (location.hostname === 'localhost' || location.hostname.endsWith('lyvuha.com'
     checkAndSyncAuth();
     window.addEventListener('storage', checkAndSyncAuth);
 }
+
+// ============================================================
+// 13. AUTO-TRANSLATE FLAG CHECK
+// ============================================================
+chrome.storage.local.get(['autoTranslateNextLoad'], (res) => {
+    if (res.autoTranslateNextLoad) {
+        chrome.storage.local.remove(['autoTranslateNextLoad'], () => {
+            console.log('[Translator] Auto-translate flag detected, starting translation...');
+            isAuto = true;
+            // Delay slightly to allow DOM to settle
+            setTimeout(() => {
+                startSession(true).then(() => translateAllPending());
+            }, 500);
+        });
+    }
+});

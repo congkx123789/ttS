@@ -112,7 +112,7 @@ export default function LanguageSelection() {
               className="w-full h-9 pl-3 pr-8 bg-surface border border-outline-variant rounded-lg font-body-medium text-body-medium text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 appearance-none cursor-pointer shadow-sm hover:bg-surface-container-high transition-colors"
             >
               <option value="browser">Offline (Trình duyệt)</option>
-              <option value="local">Python Server (Local)</option>
+              <option value="local">Server Đám Mây (VIP)</option>
             </select>
             <span className="material-symbols-outlined text-[18px] text-outline absolute right-2 top-2 pointer-events-none">
               keyboard_arrow_down
