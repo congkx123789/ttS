@@ -24,11 +24,7 @@ export default function DBSearch() {
   useEffect(() => {
     const probeBackend = async () => {
       const candidates = [
-        'https://tienhiep.lyvuha.com',
-        'https://tienhiep.lyvuha.com',
-        'https://tienhiep.lyvuha.com',
-        'http://localhost:5050',
-        'http://localhost:5000'
+        'https://tienhiep.lyvuha.com'
       ];
       for (const host of candidates) {
         try {

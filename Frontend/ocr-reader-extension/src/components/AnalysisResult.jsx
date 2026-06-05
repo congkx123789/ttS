@@ -18,12 +18,9 @@ export default function AnalysisResult({ data, onBack }) {
         }
       }
       
-      // Probe candidate hosts if connection fails
       const candidates = [
         host,
-        'https://tienhiep.lyvuha.com',
-        'http://localhost:5050',
-        'http://localhost:5000'
+        'https://tienhiep.lyvuha.com'
       ];
       
       let workingHost = null;

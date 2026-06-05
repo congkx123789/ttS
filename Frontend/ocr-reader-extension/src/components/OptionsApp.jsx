@@ -340,12 +340,6 @@ export default function OptionsApp() {
     if (host.includes('dich.lyvuha.com')) {
       return host.replace('dich.lyvuha.com', 'tienhiep.lyvuha.com');
     }
-    if (host.includes('localhost:5050')) {
-      return host.replace('localhost:5050', 'localhost:5051');
-    }
-    if (host.includes('127.0.0.1:5050')) {
-      return host.replace('127.0.0.1:5050', '127.0.0.1:5051');
-    }
     return host;
   };
   
@@ -882,7 +876,7 @@ export default function OptionsApp() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   {[
                     { id: 'browser', label: 'Offline (Trình duyệt)', desc: 'Tự chạy 100% trên Chrome, không cần Server Python.' },
-                    { id: 'local', label: 'Python Server (Cục bộ)', desc: 'Kết nối localhost:5000, hỗ trợ dịch nâng cao và sách EPUB.' }
+                    { id: 'local', label: 'Máy chủ Online', desc: 'Kết nối máy chủ, hỗ trợ dịch nâng cao và sách EPUB.' }
                   ].map(engine => (
                     <button
                       key={engine.id}

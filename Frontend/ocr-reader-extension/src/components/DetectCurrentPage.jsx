@@ -44,9 +44,9 @@ export default function DetectCurrentPage({ onAnalyze, onListenTTS }) {
     } else {
       setTabInfo({
         title: 'Trang web giả lập (Dev)',
-        url: 'localhost:5173/dev...',
+        url: 'lyvuha.com/dev...',
         favIconUrl: '',
-        fullUrl: 'http://localhost:5173'
+        fullUrl: 'https://tienhiep.lyvuha.com'
       });
     }
   }, []);
