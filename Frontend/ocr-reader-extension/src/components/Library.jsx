@@ -583,7 +583,7 @@ export default function Library() {
 
       {/* Sync Status Footer bar */}
       {user && activeView !== 'sync' && (
-        <div className="px-4 py-2 bg-surface-container-low border-t border-outline-variant flex justify-between items-center shrink-0 pb-[76px] text-[10px]">
+        <div className="px-4 py-2 bg-surface-container-low border-t border-outline-variant flex justify-between items-center shrink-0 text-[10px]">
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
             <span className="text-on-surface-variant">Tài khoản: <strong>{user.username}</strong></span>
