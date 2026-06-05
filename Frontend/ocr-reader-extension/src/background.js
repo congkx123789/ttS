@@ -541,17 +541,22 @@ chrome.runtime.onConnect.addListener((port) => {
                     const mode = settings.mode || 'advanced';
                     
                     if (engineType === 'browser') {
-                        ensureDictionariesLoaded().then(() => {
-                            msg.payload.texts.forEach((t, i) => {
-                                port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) });
-                            });
+                        ensureDictionariesLoaded().then(async () => {
+                            for (let i = 0; i < msg.payload.texts.length; i++) {
+                                port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(msg.payload.texts[i], mode) });
+                                // Add 2ms delay to yield thread and mimic Kafka asynchronous message broker streaming
+                                await new Promise(r => setTimeout(r, 2));
+                            }
                             port.postMessage({ type: "DONE" });
                         }).catch(e => port.postMessage({ type: "ERROR", error: e.message }));
                     } else {
                         getBackendHost(settings).then((host) => {
                             if (!host) {
-                                ensureDictionariesLoaded().then(() => {
-                                    msg.payload.texts.forEach((t, i) => port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) }));
+                                ensureDictionariesLoaded().then(async () => {
+                                    for (let i = 0; i < msg.payload.texts.length; i++) {
+                                        port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(msg.payload.texts[i], mode) });
+                                        await new Promise(r => setTimeout(r, 2));
+                                    }
                                     port.postMessage({ type: "DONE" });
                                 });
                                 return;
@@ -600,8 +605,11 @@ chrome.runtime.onConnect.addListener((port) => {
                                 port.postMessage({ type: "DONE" });
                             }).catch(err => {
                                 console.warn(`[Extension Background] Streaming failed. Falling back...`, err);
-                                ensureDictionariesLoaded().then(() => {
-                                    msg.payload.texts.forEach((t, i) => port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) }));
+                                ensureDictionariesLoaded().then(async () => {
+                                    for (let i = 0; i < msg.payload.texts.length; i++) {
+                                        port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(msg.payload.texts[i], mode) });
+                                        await new Promise(r => setTimeout(r, 2));
+                                    }
                                     port.postMessage({ type: "DONE" });
                                 });
                             });
