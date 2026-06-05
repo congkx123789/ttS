@@ -12,6 +12,7 @@ export default function Library() {
   const [syncingLocal, setSyncingLocal] = useState(false);
   const [user, setUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
 
   // Helper to build auth headers
   const getAuthHeaders = (extra = {}) => {
@@ -28,6 +29,7 @@ export default function Library() {
         if (result.serverUser) setUser(result.serverUser);
         if (result.serverAuthToken) setAuthToken(result.serverAuthToken);
         if (result.offlineTranslationHistory) setLocalHistory(result.offlineTranslationHistory);
+        setIsStorageLoaded(true);
       });
 
       const listener = (changes, areaName) => {
@@ -53,12 +55,13 @@ export default function Library() {
 
   // Fetch whenever active view changes
   useEffect(() => {
+    if (!isStorageLoaded) return;
     if (activeView === 'library') {
       fetchBookshelf();
     } else if (activeView === 'history') {
       fetchHistory();
     }
-  }, [activeView, serverUrl, searchQuery]);
+  }, [activeView, serverUrl, searchQuery, isStorageLoaded, authToken]);
 
   const loadLocalHistoryData = () => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -112,27 +115,24 @@ export default function Library() {
   };
 
   const fetchBookshelf = async () => {
+    if (!user || !authToken) {
+      setNovels([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const authRes = await fetch(`${serverUrl}/api/auth/me`, { headers: getAuthHeaders(), credentials: 'include' });
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        if (authData.logged_in) {
-          setUser(authData.user);
-          syncStorageUser(authData.user);
-          const res = await fetch(`${serverUrl}/api/bookshelf?q=${encodeURIComponent(searchQuery)}`, {
-            method: 'GET',
-            headers: getAuthHeaders(),
-            credentials: 'include'
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setNovels(data);
-          }
-        } else {
-          handleLoggedOutCleanup();
-          setNovels([]);
-        }
+      const res = await fetch(`${serverUrl}/api/bookshelf?q=${encodeURIComponent(searchQuery)}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNovels(data);
+      } else if (res.status === 401 || res.status === 403) {
+        handleLoggedOutCleanup();
+        setNovels([]);
       }
     } catch (e) {
       console.warn("Lỗi khi tải tủ sách từ Server:", e);
@@ -143,33 +143,26 @@ export default function Library() {
 
   const fetchHistory = async () => {
     loadLocalHistoryData(); // always reload local history to keep states synchronized
-    if (!user) {
+    if (!user || !authToken) {
       // If offline/not logged in, we only use local history
+      setHistoryGroups([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const authRes = await fetch(`${serverUrl}/api/auth/me`, { headers: getAuthHeaders(), credentials: 'include' });
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        if (authData.logged_in) {
-          setUser(authData.user);
-          syncStorageUser(authData.user);
-          const res = await fetch(`${serverUrl}/api/history?q=${encodeURIComponent(searchQuery)}`, {
-            method: 'GET',
-            headers: getAuthHeaders(),
-            credentials: 'include'
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setHistoryGroups(data);
-          }
-        } else {
-          handleLoggedOutCleanup();
-          setHistoryGroups([]);
-        }
+      const res = await fetch(`${serverUrl}/api/history?q=${encodeURIComponent(searchQuery)}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryGroups(data);
+      } else if (res.status === 401 || res.status === 403) {
+        handleLoggedOutCleanup();
+        setHistoryGroups([]);
       }
     } catch (e) {
       console.warn("Lỗi khi tải lịch sử từ Server:", e);
