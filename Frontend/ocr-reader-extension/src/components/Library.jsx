@@ -287,12 +287,71 @@ export default function Library() {
     }
   };
 
-  // Filtered local history based on search query
   const filteredLocalHistory = localHistory.filter(item => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (item.title || '').toLowerCase().includes(q) || (item.url || '').toLowerCase().includes(q);
   });
+
+  const renderLocalHistoryList = (isFallback) => {
+    if (filteredLocalHistory.length === 0) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+          <span className="material-symbols-outlined text-[44px] text-on-surface-variant">{isFallback ? "history" : "devices"}</span>
+          <h3 className="text-xs font-bold text-on-surface">{isFallback ? "Không có lịch sử" : "Lịch sử offline trống"}</h3>
+          <p className="text-[11px] text-on-surface-variant max-w-[240px]">
+            {isFallback 
+              ? "Hãy mở đọc truyện để bắt đầu ghi lại lịch sử đọc trực tuyến của bạn." 
+              : "Chưa ghi nhận chương truyện nào đã dịch trên máy này. Hãy mở một trang truyện để hệ thống tự ghi nhận lịch sử cục bộ!"}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex-1 overflow-y-auto px-4 pb-4 custom-scrollbar space-y-3">
+        <div className={`border p-2.5 rounded-xl text-center mb-1 ${isFallback ? 'bg-blue-500/10 border-blue-500/20' : 'bg-yellow-500/10 border-yellow-500/20'}`}>
+          <p className={`text-[10px] font-semibold leading-relaxed ${isFallback ? 'text-blue-800' : 'text-yellow-800'}`}>
+            {isFallback 
+              ? <>💡 Chưa có lịch sử online. Đang hiển thị lịch sử lưu trên máy. Hãy đọc truyện để lưu đồng bộ.</>
+              : <>💡 Đang hiển thị lịch sử offline. Đăng nhập ở tab <strong>Đồng bộ</strong> để lưu trữ trực tuyến.</>}
+          </p>
+        </div>
+        
+        <h4 className="text-[10px] font-bold text-secondary uppercase tracking-wider px-1">
+          💻 ĐÃ DỊCH GẦN ĐÂY TRÊN THIẾT BỊ NÀY
+        </h4>
+        <div className="space-y-2">
+          {filteredLocalHistory.map((item, bIdx) => (
+            <div 
+              key={bIdx}
+              onClick={() => handleNovelClick(item)}
+              className="flex bg-surface-container-lowest border border-outline-variant rounded-xl p-2 gap-3 hover:border-primary/50 transition-all cursor-pointer items-center group"
+            >
+              <div className="w-10 h-10 bg-surface-container rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-outline">
+                {item.favIconUrl ? (
+                  <img src={item.favIconUrl} alt="" className="w-6 h-6 object-contain" onError={(e) => e.target.style.display = 'none'} />
+                ) : (
+                  <span className="material-symbols-outlined text-[18px]">public</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h5 className="text-[11px] font-bold text-on-surface truncate leading-tight group-hover:text-primary transition-colors">
+                  {item.title || "Truyện không tên"}
+                </h5>
+                <p className="text-[9px] text-on-surface-variant truncate mt-0.5">
+                  🔗 {item.url}
+                </p>
+              </div>
+              <span className="text-[8px] px-1.5 py-0.5 bg-surface-container-high text-on-surface-variant rounded border border-outline-variant font-bold shrink-0 self-center">
+                OFFLINE
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-background space-y-4 overflow-hidden">
@@ -465,13 +524,7 @@ export default function Library() {
           user ? (
             /* Online Grouped History */
             historyGroups.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
-                <span className="material-symbols-outlined text-[44px] text-on-surface-variant">history</span>
-                <h3 className="text-xs font-bold text-on-surface">Không có lịch sử online</h3>
-                <p className="text-[11px] text-on-surface-variant max-w-[240px]">
-                  Hãy mở đọc truyện để bắt đầu ghi lại lịch sử đọc trực tuyến của bạn.
-                </p>
-              </div>
+              renderLocalHistoryList(true)
             ) : (
               <div className="flex-1 overflow-y-auto px-4 pb-4 custom-scrollbar space-y-4">
                 {historyGroups.map((group, gIdx) => (
@@ -523,55 +576,7 @@ export default function Library() {
             )
           ) : (
             /* Local Offline History (No login required) */
-            filteredLocalHistory.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
-                <span className="material-symbols-outlined text-[44px] text-on-surface-variant">devices</span>
-                <h3 className="text-xs font-bold text-on-surface">Lịch sử offline trống</h3>
-                <p className="text-[11px] text-on-surface-variant max-w-[240px]">
-                  Chưa ghi nhận chương truyện nào đã dịch trên máy này. Hãy mở một trang truyện để hệ thống tự ghi nhận lịch sử cục bộ!
-                </p>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto px-4 pb-4 custom-scrollbar space-y-3">
-                <div className="bg-yellow-500/10 border border-yellow-500/20 p-2.5 rounded-xl text-center mb-1">
-                  <p className="text-[10px] text-yellow-800 font-semibold leading-relaxed">
-                    💡 Đang hiển thị lịch sử offline lưu trên máy này. Đăng nhập ở tab <strong>Đồng bộ</strong> để đồng bộ và lưu trữ trực tuyến vĩnh viễn.
-                  </p>
-                </div>
-                
-                <h4 className="text-[10px] font-bold text-secondary uppercase tracking-wider px-1">
-                  💻 ĐÃ DỊCH GẦN ĐÂY TRÊN THIẾT BỊ NÀY
-                </h4>
-                <div className="space-y-2">
-                  {filteredLocalHistory.map((item, bIdx) => (
-                    <div 
-                      key={bIdx}
-                      onClick={() => handleNovelClick(item)}
-                      className="flex bg-surface-container-lowest border border-outline-variant rounded-xl p-2 gap-3 hover:border-primary/50 transition-all cursor-pointer items-center group"
-                    >
-                      <div className="w-10 h-10 bg-surface-container rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-outline">
-                        {item.favIconUrl ? (
-                          <img src={item.favIconUrl} alt="" className="w-6 h-6 object-contain" onError={(e) => e.target.style.display = 'none'} />
-                        ) : (
-                          <span className="material-symbols-outlined text-[18px]">public</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-[11px] font-bold text-on-surface truncate leading-tight group-hover:text-primary transition-colors">
-                          {item.title || "Truyện không tên"}
-                        </h5>
-                        <p className="text-[9px] text-on-surface-variant truncate mt-0.5">
-                          🔗 {item.url}
-                        </p>
-                      </div>
-                      <span className="text-[8px] px-1.5 py-0.5 bg-surface-container-high text-on-surface-variant rounded border border-outline-variant font-bold shrink-0 self-center">
-                        OFFLINE
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
+            renderLocalHistoryList(false)
           )
         ) : (
           /* DataSync settings tab */
