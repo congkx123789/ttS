@@ -827,10 +827,38 @@ export default function OptionsApp() {
                   </h3>
                   {serverUser && (
                     <button 
-                      onClick={() => {
-                        if (typeof chrome !== 'undefined' && chrome.storage) {
-                          chrome.storage.local.remove(['serverUser', 'serverAuthToken', 'serverRefreshToken']);
-                          window.location.reload();
+                      onClick={async () => {
+                        try {
+                          const host = (settings.serverUrl || "https://tienhiep.lyvuha.com").replace(/\/$/, '');
+                          let token = '';
+                          if (typeof chrome !== 'undefined' && chrome.storage) {
+                            const res = await new Promise(resolve => chrome.storage.local.get(['serverAuthToken'], resolve));
+                            token = res.serverAuthToken;
+                          }
+                          const headers = {};
+                          if (token) headers['Authorization'] = `Bearer ${token}`;
+                          
+                          await fetch(`${host}/api/auth/logout`, {
+                            method: 'POST',
+                            headers,
+                            credentials: 'include'
+                          });
+                        } catch (e) {
+                          console.error("Logout error", e);
+                        } finally {
+                          if (typeof chrome !== 'undefined' && chrome.storage) {
+                            chrome.storage.local.remove(['serverUser', 'serverAuthToken', 'serverRefreshToken']);
+                            chrome.storage.local.get(['settings'], (storageRes) => {
+                              const s = storageRes.settings || {};
+                              if (s.vipKey === 'VIP_SERVER') {
+                                s.membershipType = 'standard';
+                                s.vipKey = '';
+                                chrome.storage.local.set({ settings: s }, () => window.location.reload());
+                              } else {
+                                window.location.reload();
+                              }
+                            });
+                          }
                         }
                       }}
                       className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
