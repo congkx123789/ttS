@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const BACKEND_CANDIDATES = [
   'https://tienhiep.lyvuha.com',
-  'https://tienhiep.lyvuha.com',
-  'https://tienhiep.lyvuha.com',
+  'http://localhost:5051',
   'http://localhost:5050',
 ];
 

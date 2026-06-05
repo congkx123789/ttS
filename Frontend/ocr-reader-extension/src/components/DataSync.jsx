@@ -8,20 +8,25 @@ export default function DataSync({ onSyncFinished }) {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUrlLoaded, setIsUrlLoaded] = useState(false);
+  const [authToken, setAuthToken] = useState('');
 
   // Load serverUrl and user on mount
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.get(['serverUrl', 'settings', 'serverUser'], (res) => {
+      chrome.storage.local.get(['serverUrl', 'settings', 'serverUser', 'serverAuthToken'], (res) => {
         const storedUrl = res.serverUrl || (res.settings && res.settings.apiHost) || 'https://tienhiep.lyvuha.com';
         setServerUrl(storedUrl);
         setInputUrl(storedUrl);
         if (res.serverUser) {
           setUser(res.serverUser);
+        }
+        if (res.serverAuthToken) {
+          setAuthToken(res.serverAuthToken);
         }
         setIsUrlLoaded(true);
       });
@@ -63,9 +68,11 @@ export default function DataSync({ onSyncFinished }) {
     setLoading(true);
     setErrorMsg('');
     try {
+      const headers = { 'Accept': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
       const res = await fetch(`${serverUrl}/api/auth/me`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers,
         credentials: 'include'
       });
       if (res.ok) {
@@ -120,6 +127,10 @@ export default function DataSync({ onSyncFinished }) {
       setErrorMsg("Vui lòng điền đầy đủ tài khoản & mật khẩu.");
       return;
     }
+    if (!isLoginMode && !email.trim()) {
+      setErrorMsg("Vui lòng nhập Email để khôi phục mật khẩu sau này.");
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMsg('');
@@ -127,10 +138,13 @@ export default function DataSync({ onSyncFinished }) {
 
     const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
     try {
+      const body = isLoginMode 
+        ? { username, password } 
+        : { username, password, email };
       const res = await fetch(`${serverUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(body),
         credentials: 'include'
       });
       const data = await res.json();
@@ -141,6 +155,9 @@ export default function DataSync({ onSyncFinished }) {
           setUser(data.user);
           setUsername('');
           setPassword('');
+          setEmail('');
+          const newToken = data.access_token || '';
+          setAuthToken(newToken);
           if (typeof chrome !== 'undefined' && chrome.storage) {
             chrome.storage.local.set({ 
               serverUser: data.user, 
@@ -174,6 +191,7 @@ export default function DataSync({ onSyncFinished }) {
           setSuccessMsg("Đăng ký thành công! Đang chuyển sang đăng nhập...");
           setIsLoginMode(true);
           setPassword('');
+          setEmail('');
         }
       } else {
         setErrorMsg(data.error || "Có lỗi xảy ra.");
@@ -188,11 +206,15 @@ export default function DataSync({ onSyncFinished }) {
   const handleLogout = async () => {
     setLoading(true);
     try {
+      const headers = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
       await fetch(`${serverUrl}/api/auth/logout`, {
         method: 'POST',
+        headers,
         credentials: 'include'
       });
       setUser(null);
+      setAuthToken('');
       setSuccessMsg("Đã đăng xuất.");
       if (typeof chrome !== 'undefined' && chrome.storage) {
         chrome.storage.local.remove(['serverUser', 'serverAuthToken', 'serverRefreshToken']);
@@ -333,6 +355,19 @@ export default function DataSync({ onSyncFinished }) {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+
+            {!isLoginMode && (
+              <div className="space-y-1">
+                <label className="text-[10px] text-on-surface-variant font-medium ml-1">Email (để khôi phục mật khẩu)</label>
+                <input 
+                  className="w-full h-8.5 bg-surface-container-low border border-outline-variant rounded-lg px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" 
+                  type="email" 
+                  placeholder="Nhập email của bạn"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            )}
 
             <button 
               type="submit"

@@ -4,6 +4,7 @@ import DataSync from './DataSync';
 export default function Library() {
   const [activeView, setActiveView] = useState('library'); // 'library', 'history', or 'sync'
   const [serverUrl, setServerUrl] = useState('https://tienhiep.lyvuha.com');
+  const [authToken, setAuthToken] = useState('');
   const [novels, setNovels] = useState([]);
   const [historyGroups, setHistoryGroups] = useState([]);
   const [localHistory, setLocalHistory] = useState([]); // local history stored in chrome extension
@@ -12,12 +13,20 @@ export default function Library() {
   const [user, setUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Helper to build auth headers
+  const getAuthHeaders = (extra = {}) => {
+    const headers = { 'Accept': 'application/json', ...extra };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    return headers;
+  };
+
   // Initial load and storage listeners for dynamic sync
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.get(['serverUrl', 'serverUser', 'offlineTranslationHistory'], (result) => {
+      chrome.storage.local.get(['serverUrl', 'serverUser', 'offlineTranslationHistory', 'serverAuthToken'], (result) => {
         if (result.serverUrl) setServerUrl(result.serverUrl);
         if (result.serverUser) setUser(result.serverUser);
+        if (result.serverAuthToken) setAuthToken(result.serverAuthToken);
         if (result.offlineTranslationHistory) setLocalHistory(result.offlineTranslationHistory);
       });
 
@@ -25,6 +34,9 @@ export default function Library() {
         if (areaName === 'local') {
           if (changes.serverUrl) {
             setServerUrl(changes.serverUrl.newValue || 'https://tienhiep.lyvuha.com');
+          }
+          if (changes.serverAuthToken) {
+            setAuthToken(changes.serverAuthToken.newValue || '');
           }
           if (changes.serverUser) {
             setUser(changes.serverUser.newValue || null);
@@ -102,7 +114,7 @@ export default function Library() {
   const fetchBookshelf = async () => {
     setLoading(true);
     try {
-      const authRes = await fetch(`${serverUrl}/api/auth/me`, { credentials: 'include' });
+      const authRes = await fetch(`${serverUrl}/api/auth/me`, { headers: getAuthHeaders(), credentials: 'include' });
       if (authRes.ok) {
         const authData = await authRes.json();
         if (authData.logged_in) {
@@ -110,6 +122,7 @@ export default function Library() {
           syncStorageUser(authData.user);
           const res = await fetch(`${serverUrl}/api/bookshelf?q=${encodeURIComponent(searchQuery)}`, {
             method: 'GET',
+            headers: getAuthHeaders(),
             credentials: 'include'
           });
           if (res.ok) {
@@ -138,7 +151,7 @@ export default function Library() {
 
     setLoading(true);
     try {
-      const authRes = await fetch(`${serverUrl}/api/auth/me`, { credentials: 'include' });
+      const authRes = await fetch(`${serverUrl}/api/auth/me`, { headers: getAuthHeaders(), credentials: 'include' });
       if (authRes.ok) {
         const authData = await authRes.json();
         if (authData.logged_in) {
@@ -146,6 +159,7 @@ export default function Library() {
           syncStorageUser(authData.user);
           const res = await fetch(`${serverUrl}/api/history?q=${encodeURIComponent(searchQuery)}`, {
             method: 'GET',
+            headers: getAuthHeaders(),
             credentials: 'include'
           });
           if (res.ok) {
@@ -174,7 +188,7 @@ export default function Library() {
       const payload = book.book_id ? { book_id: book.book_id } : { url: book.url };
       const res = await fetch(`${serverUrl}/api/bookshelf/remove`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
         credentials: 'include'
       });
@@ -197,6 +211,7 @@ export default function Library() {
       try {
         const res = await fetch(`${serverUrl}/api/history/clear`, {
           method: 'POST',
+          headers: getAuthHeaders(),
           credentials: 'include'
         });
         if (res.ok) {
@@ -239,7 +254,7 @@ export default function Library() {
         // Sync item using backend sync endpoint
         const res = await fetch(`${serverUrl}/api/extension/sync`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             url: item.url,
             title: item.title,
