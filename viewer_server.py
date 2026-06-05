@@ -2726,6 +2726,14 @@ try:
 except Exception as e:
     logger.error(f"⚠️ Auto database initialization failed: {e}")
 
+# Pre-load translation engine to avoid 15s latency on first request
+try:
+    logger.info("⏳ Pre-loading Vietphrase Engine (Dictionaries)... This will take ~10 seconds.")
+    get_engine()
+    logger.info("✅ Vietphrase Engine loaded successfully.")
+except Exception as e:
+    logger.error(f"⚠️ Failed to pre-load translation engine: {e}")
+
 if __name__ == "__main__":
     if not os.path.exists(DB):
         logger.error(f"Loi: Khong tim thay {DB}")
