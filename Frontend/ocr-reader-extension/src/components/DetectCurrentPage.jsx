@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function DetectCurrentPage({ onAnalyze }) {
+export default function DetectCurrentPage({ onAnalyze, onListenTTS }) {
   const [tabInfo, setTabInfo] = useState({
     title: 'Đang tải...',
     url: '...',
@@ -58,9 +58,37 @@ export default function DetectCurrentPage({ onAnalyze }) {
     }
     setIsAuto(newState);
     
-    // Nếu bật lên thì báo cho App lưu lịch sử (nếu cần)
     if (newState && onAnalyze) {
-      onAnalyze(tabInfo, true); // true = isAutoToggle
+      onAnalyze(tabInfo, true);
+    }
+  };
+
+  const handleListenTTS = async () => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      try {
+        let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        chrome.tabs.sendMessage(tab.id, { action: "GET_CLEAN_TEXT" }, function(response) {
+          if (response && response.success && response.data) {
+            onListenTTS(response.data);
+          } else {
+            alert("Không thể trích xuất nội dung chương truyện ở trang web này!");
+          }
+        });
+      } catch (error) {
+        console.error("Lỗi khi kết nối content script:", error);
+      }
+    } else {
+      onListenTTS({
+        novelTitle: "Vạn Đạo Kiếm Tôn (Dev)",
+        chapterTitle: "Chương 1: Thụ Kiếm",
+        author: "Mạc Mặc",
+        cover: "",
+        text: "Trời nhá nhem tối, mây đen vần vũ che kín bầu trời, những hạt mưa lất phất bắt đầu rơi xuống những mái nhà ngói đỏ của Kiếm Tông. Tiếng mưa rơi rả rích như một bản nhạc buồn bã, vang vọng khắp sơn môn tĩnh lặng.\n\nTrong một căn phòng nhỏ xập xệ nằm ở góc hẻo lánh nhất của ngoại môn, Lâm Dật đang ngồi bó gối trên chiếc giường tre ọp ẹp...",
+        paragraphs: [
+          "Trời nhá nhem tối, mây đen vần vũ che kín bầu trời, những hạt mưa lất phất bắt đầu rơi xuống những mái nhà ngói đỏ của Kiếm Tông. Tiếng mưa rơi rả rích như một bản nhạc buồn bã, vang vọng khắp sơn môn tĩnh lặng.",
+          "Trong một căn phòng nhỏ xập xệ nằm ở góc hẻo lánh nhất của ngoại môn, Lâm Dật đang ngồi bó gối trên chiếc giường tre ọp ẹp..."
+        ]
+      });
     }
   };
 
@@ -84,15 +112,24 @@ export default function DetectCurrentPage({ onAnalyze }) {
           <p className="font-body-sm text-body-sm opacity-80 truncate" title={tabInfo.fullUrl}>{tabInfo.url}</p>
         </div>
       </div>
-      <button 
-        onClick={handleToggle}
-        className={`w-full h-9 rounded-lg font-label-md text-label-md flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all ${isAuto ? 'bg-error text-white' : 'bg-on-secondary-fixed text-white'}`}
-      >
-        <span className="material-symbols-outlined text-[18px]">
-          {isAuto ? 'stop_circle' : 'auto_fix_high'}
-        </span>
-        {isAuto ? 'Dừng Dịch Tự Động' : 'Bắt đầu Dịch'}
-      </button>
+      <div className="flex gap-2">
+        <button 
+          onClick={handleToggle}
+          className={`flex-1 h-9 rounded-lg font-label-md text-label-md flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.98] transition-all ${isAuto ? 'bg-error text-white' : 'bg-on-secondary-fixed text-white'}`}
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            {isAuto ? 'stop_circle' : 'auto_fix_high'}
+          </span>
+          {isAuto ? 'Dừng Dịch' : 'Bắt đầu Dịch'}
+        </button>
+        <button 
+          onClick={handleListenTTS}
+          className="flex-1 h-9 bg-primary text-on-primary rounded-lg font-label-md text-label-md flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.98] transition-all"
+        >
+          <span className="material-symbols-outlined text-[18px]">play_circle</span>
+          Nghe đọc AI (TTS)
+        </button>
+      </div>
     </section>
   );
 }

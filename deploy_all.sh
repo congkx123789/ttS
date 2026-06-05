@@ -15,11 +15,11 @@ echo "========================================================="
 if [ -f "$KEY_FILE" ]; then
     echo "✔ Tìm thấy tệp gcp-key.json. Sử dụng Service Account để xác thực."
     export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
-    PROJECT_ID="learned-acronym-498316-h-a98d9"
+    PROJECT_ID="learned-acronym-498316-h9"
 else
     echo "ℹ Không tìm thấy gcp-key.json. Sử dụng phiên đăng nhập trực tiếp (OAuth) của bạn."
     echo "👉 Hãy đảm bảo bạn đã chạy lệnh 'firebase login' thành công trước đó."
-    PROJECT_ID="learned-acronym-498316-h-a98d9"
+    PROJECT_ID="learned-acronym-498316-h9"
 fi
 
 if [ -z "$PROJECT_ID" ]; then

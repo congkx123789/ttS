@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TopAppBar from './components/TopAppBar';
 import BottomNavBar from './components/BottomNavBar';
 import LanguageSelection from './components/LanguageSelection';
@@ -26,6 +26,220 @@ function App() {
   const [analysisState, setAnalysisState] = useState('idle'); // 'idle', 'analyzing', 'success'
   const [currentNovelView, setCurrentNovelView] = useState(null); // 'player' | 'reader' | 'index' | null
   const [currentAnalysisData, setCurrentAnalysisData] = useState(null);
+  const [activeChapterData, setActiveChapterData] = useState(null);
+
+  // TTS Playback State
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentParagraphIndex, setCurrentParagraphIndex] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [playbackEngine, setPlaybackEngine] = useState('local'); // 'local' | 'cloud'
+  const [selectedVoice, setSelectedVoice] = useState('');
+
+  const audioRef = useRef(null);
+  const utteranceRef = useRef(null);
+
+  // Helper: skip to next
+  const handleNextParagraph = () => {
+    if (activeChapterData?.paragraphs) {
+      setCurrentParagraphIndex(prev => {
+        if (prev + 1 < activeChapterData.paragraphs.length) {
+          return prev + 1;
+        } else {
+          setIsPlaying(false);
+          triggerAutoNextChapter();
+          return prev;
+        }
+      });
+    }
+  };
+
+  const triggerAutoNextChapter = () => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTO_NEXT" }, (response) => {
+            console.log("[App.jsx] Triggered auto next chapter click.");
+          });
+        }
+      });
+    }
+  };
+
+  // Auto load next chapter on tab load complete
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      const handleTabUpdate = (tabId, changeInfo, tab) => {
+        if (changeInfo.status === 'complete') {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs && tabs[0] && tabs[0].id === tabId) {
+              console.log("[App.jsx] Tab completed loading. Fetching next chapter clean text...");
+              setTimeout(() => {
+                chrome.tabs.sendMessage(tabId, { action: "GET_CLEAN_TEXT" }, (response) => {
+                  if (response && response.success && response.data) {
+                    setActiveChapterData(response.data);
+                    setCurrentParagraphIndex(0);
+                    setIsPlaying(true); // Auto-play the next chapter!
+                  }
+                });
+              }, 1200);
+            }
+          });
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(handleTabUpdate);
+      return () => {
+        chrome.tabs.onUpdated.removeListener(handleTabUpdate);
+      };
+    }
+  }, []);
+
+  // Initialize audio and manage window.isTtsPlaying flag
+  useEffect(() => {
+    audioRef.current = new Audio();
+    audioRef.current.onended = () => {
+      handleNextParagraph();
+    };
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      window.speechSynthesis.cancel();
+      // Reset page global flag
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0]) {
+            chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => { window.isTtsPlaying = false; }
+            }).catch(() => {});
+          }
+        });
+      }
+    };
+  }, [activeChapterData]);
+
+  // Set playback speed when it changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
+
+  // Main playback handler
+  useEffect(() => {
+    if (!isPlaying || !activeChapterData?.paragraphs || activeChapterData.paragraphs.length === 0) {
+      window.speechSynthesis.pause();
+      if (audioRef.current) audioRef.current.pause();
+      
+      // Update browser tab global TTS playing state to allow autoNext
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0]) {
+            chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => { window.isTtsPlaying = false; }
+            }).catch(() => {});
+          }
+        });
+      }
+      return;
+    }
+
+    // Set page global flag so browser tab autoNext doesn't trigger during play
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0]) {
+          chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: () => { window.isTtsPlaying = true; }
+          }).catch(() => {});
+        }
+      });
+    }
+
+    const paragraphText = activeChapterData.paragraphs[currentParagraphIndex];
+    if (!paragraphText) {
+      setIsPlaying(false);
+      return;
+    }
+
+    if (playbackEngine === 'local') {
+      if (audioRef.current) audioRef.current.pause();
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(paragraphText);
+      utteranceRef.current = utterance;
+      utterance.rate = playbackSpeed;
+      
+      if (selectedVoice) {
+        const voices = window.speechSynthesis.getVoices();
+        const foundVoice = voices.find(v => v.name === selectedVoice);
+        if (foundVoice) utterance.voice = foundVoice;
+      }
+
+      utterance.onend = () => {
+        handleNextParagraph();
+      };
+      utterance.onerror = (e) => {
+        if (e.error !== 'interrupted') {
+          console.error("Local TTS Error:", e);
+          handleNextParagraph();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      window.speechSynthesis.cancel();
+      if (audioRef.current) audioRef.current.pause();
+
+      const fetchCloudTTS = async () => {
+        try {
+          if (typeof chrome !== 'undefined' && chrome.storage) {
+            chrome.storage.local.get(['settings', 'serverUrl'], async (result) => {
+              const host = result.serverUrl || 'https://api-tienhiep.lyvuha.com';
+              const settings = result.settings || {};
+              
+              const res = await fetch(`${host}/v1/audio/speech`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-VIP-Key': settings.vipKey || ''
+                },
+                body: JSON.stringify({
+                  input: paragraphText,
+                  speed: playbackSpeed,
+                  vip_key: settings.vipKey || ''
+                })
+              });
+              
+              if (res.ok) {
+                const blob = await res.blob();
+                const audioUrl = URL.createObjectURL(blob);
+                if (audioRef.current) {
+                  audioRef.current.src = audioUrl;
+                  audioRef.current.play().catch(e => {
+                    console.error("Cloud playback failed:", e);
+                    setPlaybackEngine('local');
+                  });
+                }
+              } else {
+                setPlaybackEngine('local');
+              }
+            });
+          } else {
+            setPlaybackEngine('local');
+          }
+        } catch (err) {
+          console.error("Cloud TTS failed:", err);
+          setPlaybackEngine('local');
+        }
+      };
+
+      fetchCloudTTS();
+    }
+  }, [isPlaying, currentParagraphIndex, playbackEngine, selectedVoice, activeChapterData, playbackSpeed]);
 
   // VIP Membership State
   const [settings, setSettings] = useState({
@@ -207,17 +421,32 @@ function App() {
   return (
     <div className="w-[450px] h-[600px] bg-background text-on-background relative flex flex-col overflow-hidden shadow-2xl rounded-xl border border-outline-variant mx-auto">
       
-      {/* Novel Views Overlays */}
       {currentNovelView === 'player' && (
         <NovelPlayer 
+          chapterData={activeChapterData}
           onBack={() => setCurrentNovelView(null)} 
           onReadText={() => setCurrentNovelView('reader')}
           onOpenIndex={() => setCurrentNovelView('index')}
+          isPlaying={isPlaying}
+          setIsPlaying={setIsPlaying}
+          currentParagraphIndex={currentParagraphIndex}
+          setCurrentParagraphIndex={setCurrentParagraphIndex}
+          playbackSpeed={playbackSpeed}
+          setPlaybackSpeed={setPlaybackSpeed}
+          playbackEngine={playbackEngine}
+          setPlaybackEngine={setPlaybackEngine}
+          selectedVoice={selectedVoice}
+          setSelectedVoice={setSelectedVoice}
         />
       )}
       
       {currentNovelView === 'reader' && (
-        <NovelReader onBack={() => setCurrentNovelView('player')} />
+        <NovelReader 
+          chapterData={activeChapterData}
+          onBack={() => setCurrentNovelView('player')} 
+          currentParagraphIndex={currentParagraphIndex}
+          setCurrentParagraphIndex={setCurrentParagraphIndex}
+        />
       )}
 
       {currentNovelView === 'index' && (
@@ -270,7 +499,13 @@ function App() {
                 {activeTab === 'web' ? (
                   <>
                     <URLInputSection />
-                    <DetectCurrentPage onAnalyze={handleAnalyze} />
+                    <DetectCurrentPage 
+                      onAnalyze={handleAnalyze} 
+                      onListenTTS={(data) => {
+                        setActiveChapterData(data);
+                        setCurrentNovelView('player');
+                      }}
+                    />
                     <RecentlyTranslated />
                   </>
                 ) : (

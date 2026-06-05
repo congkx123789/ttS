@@ -19,6 +19,321 @@ export default function OptionsApp() {
     vipKey: ''
   });
 
+  // TTS & Reader States
+  const [activeChapterData, setActiveChapterData] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentParagraphIndex, setCurrentParagraphIndex] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [playbackEngine, setPlaybackEngine] = useState('local'); // 'local' | 'cloud'
+  const [selectedVoice, setSelectedVoice] = useState('');
+  const [voices, setVoices] = useState([]);
+  const [fontSize, setFontSize] = useState(18); // default font size for reader
+  const [readerTheme, setReaderTheme] = useState('dark'); // 'dark' | 'light' | 'sepia'
+  
+  // Tab tracking and TOC
+  const [sourceTabId, setSourceTabId] = useState(null);
+  const [tocChapters, setTocChapters] = useState([]);
+  const [tocLoading, setTocLoading] = useState(false);
+
+  const audioRef = React.useRef(null);
+  const utteranceRef = React.useRef(null);
+
+  // Search for the actual reading tab on the browser
+  const searchForNovelTab = (resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.tabs) {
+      if (resolve) resolve(null);
+      return;
+    }
+    chrome.tabs.query({}, (tabs) => {
+      const potentialTabs = tabs.filter(t => t.url && !t.url.startsWith('chrome') && !t.url.startsWith('about:') && !t.url.includes(chrome.runtime.id));
+      
+      // Look for active tabs in other windows, or a tab matching novel domains
+      let bestTab = potentialTabs.find(t => t.active);
+      if (!bestTab) {
+        bestTab = potentialTabs.find(t => t.url.includes('hjwzw.com') || t.url.includes('truyen') || t.url.includes('book') || t.url.includes('novel') || t.url.includes('qidian') || t.url.includes('fanqie'));
+      }
+      if (!bestTab && potentialTabs.length > 0) {
+        bestTab = potentialTabs[0];
+      }
+      
+      if (bestTab) {
+        setSourceTabId(bestTab.id);
+        if (resolve) resolve(bestTab.id);
+      } else {
+        if (resolve) resolve(null);
+      }
+    });
+  };
+
+  // Helper to send messages specifically to our novel source tab
+  const sendTabMessage = (msg, callback) => {
+    if (typeof chrome === 'undefined' || !chrome.tabs) return;
+    
+    const send = (tabId) => {
+      chrome.tabs.sendMessage(tabId, msg, (res) => {
+        if (chrome.runtime.lastError) {
+          console.warn("[Options] Message target lost. Searching again...");
+          searchForNovelTab((newTabId) => {
+            if (newTabId) {
+              chrome.tabs.sendMessage(newTabId, msg, callback);
+            }
+          });
+        } else if (callback) {
+          callback(res);
+        }
+      });
+    };
+
+    if (sourceTabId) {
+      send(sourceTabId);
+    } else {
+      searchForNovelTab((newTabId) => {
+        if (newTabId) {
+          send(newTabId);
+        }
+      });
+    }
+  };
+
+  // Load voices for selector
+  useEffect(() => {
+    const updateVoices = () => {
+      const available = window.speechSynthesis.getVoices();
+      const viVoices = available.filter(v => v.lang.startsWith('vi') || v.lang.startsWith('en'));
+      setVoices(viVoices.length > 0 ? viVoices : available);
+      if (viVoices.length > 0 && !selectedVoice) {
+        setSelectedVoice(viVoices[0].name);
+      }
+    };
+    updateVoices();
+    window.speechSynthesis.onvoiceschanged = updateVoices;
+  }, []);
+
+  const handleNextParagraph = () => {
+    if (activeChapterData?.paragraphs) {
+      setCurrentParagraphIndex(prev => {
+        if (prev + 1 < activeChapterData.paragraphs.length) {
+          return prev + 1;
+        } else {
+          setIsPlaying(false);
+          triggerAutoNextChapter();
+          return prev;
+        }
+      });
+    }
+  };
+
+  const triggerAutoNextChapter = () => {
+    sendTabMessage({ action: "TRIGGER_AUTO_NEXT" }, (response) => {
+      console.log("[Options] Triggered auto next chapter click.");
+    });
+  };
+
+  // Sync with active tab on mount or tab changes
+  const syncWithActiveTab = () => {
+    sendTabMessage({ action: "GET_CLEAN_TEXT" }, (response) => {
+      if (response && response.success && response.data) {
+        setActiveChapterData(response.data);
+        setCurrentParagraphIndex(0);
+      } else {
+        console.warn("Active tab returned no novel text.");
+      }
+    });
+  };
+
+  useEffect(() => {
+    syncWithActiveTab();
+  }, [activeTab]);
+
+  // Tab updated listener (fires when page changes chapters)
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      const handleTabUpdate = (tabId, changeInfo, tab) => {
+        if (changeInfo.status === 'complete' && tabId === sourceTabId) {
+          console.log("[Options] Source tab navigated. Syncing new chapter...");
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "GET_CLEAN_TEXT" }, (response) => {
+              if (response && response.success && response.data) {
+                setActiveChapterData(response.data);
+                setCurrentParagraphIndex(0);
+                setIsPlaying(true); // Resume playing next chapter immediately!
+              }
+            });
+          }, 1200);
+        }
+      };
+      chrome.tabs.onUpdated.addListener(handleTabUpdate);
+      return () => {
+        chrome.tabs.onUpdated.removeListener(handleTabUpdate);
+      };
+    }
+  }, [sourceTabId]);
+
+  // Fetch Table Of Contents (Mục Lục) dynamically
+  useEffect(() => {
+    if (!activeChapterData?.tocUrl) {
+      setTocChapters([]);
+      return;
+    }
+    
+    const fetchTOC = async () => {
+      setTocLoading(true);
+      try {
+        console.log("[TOC] Fetching table of contents from:", activeChapterData.tocUrl);
+        const res = await fetch(activeChapterData.tocUrl);
+        if (res.ok) {
+          const html = await res.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          const anchors = Array.from(doc.querySelectorAll('a'));
+          const chapters = [];
+          const seenUrls = new Set();
+          
+          anchors.forEach(a => {
+            const href = a.getAttribute('href');
+            if (!href) return;
+            const text = a.textContent.trim();
+            
+            let fullUrl = href;
+            if (href.startsWith('//')) {
+              fullUrl = 'https:' + href;
+            } else if (href.startsWith('/')) {
+              const urlObj = new URL(activeChapterData.tocUrl);
+              fullUrl = urlObj.origin + href;
+            } else if (!href.startsWith('http')) {
+              const urlObj = new URL(activeChapterData.tocUrl);
+              const pathParts = urlObj.pathname.split('/');
+              pathParts.pop();
+              fullUrl = urlObj.origin + pathParts.join('/') + '/' + href;
+            }
+            
+            if (seenUrls.has(fullUrl)) return;
+            
+            // Filter chapter links
+            const isChap = /第\s*\d+\s*[章回节]/.test(text) || 
+                           /Chương\s*\d+/.test(text) || 
+                           (text && /^\d+/.test(text) && text.length < 50) ||
+                           (fullUrl.includes('/Read/') && text.length > 2 && text.length < 60);
+                           
+            if (isChap && text.length > 2) {
+              chapters.push({ title: text, url: fullUrl });
+              seenUrls.add(fullUrl);
+            }
+          });
+          
+          console.log(`[TOC] Parsed ${chapters.length} chapters.`);
+          setTocChapters(chapters);
+        }
+      } catch (e) {
+        console.error("[TOC] Failed to fetch TOC:", e);
+      } finally {
+        setTocLoading(false);
+      }
+    };
+    
+    fetchTOC();
+  }, [activeChapterData?.tocUrl]);
+
+  // Audio setup
+  useEffect(() => {
+    audioRef.current = new Audio();
+    audioRef.current.onended = () => {
+      handleNextParagraph();
+    };
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      window.speechSynthesis.cancel();
+    };
+  }, [activeChapterData]);
+
+  // Handle TTS play
+  useEffect(() => {
+    if (!isPlaying || !activeChapterData?.paragraphs || activeChapterData.paragraphs.length === 0) {
+      window.speechSynthesis.pause();
+      if (audioRef.current) audioRef.current.pause();
+      return;
+    }
+
+    const paragraphText = activeChapterData.paragraphs[currentParagraphIndex];
+    if (!paragraphText) {
+      setIsPlaying(false);
+      return;
+    }
+
+    if (playbackEngine === 'local') {
+      if (audioRef.current) audioRef.current.pause();
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(paragraphText);
+      utteranceRef.current = utterance;
+      utterance.rate = playbackSpeed;
+      
+      if (selectedVoice) {
+        const voicesList = window.speechSynthesis.getVoices();
+        const foundVoice = voicesList.find(v => v.name === selectedVoice);
+        if (foundVoice) utterance.voice = foundVoice;
+      }
+
+      utterance.onend = () => {
+        handleNextParagraph();
+      };
+      utterance.onerror = (e) => {
+        if (e.error !== 'interrupted') {
+          console.error("Local TTS Error options:", e);
+          handleNextParagraph();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      window.speechSynthesis.cancel();
+      if (audioRef.current) audioRef.current.pause();
+
+      const fetchCloudTTS = async () => {
+        try {
+          const host = settings.apiHost || 'https://api-tienhiep.lyvuha.com';
+          const cleanedHost = host.replace(/\/$/, '');
+          const res = await fetch(`${cleanedHost}/v1/audio/speech`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-VIP-Key': settings.vipKey || ''
+            },
+            body: JSON.stringify({
+              input: paragraphText,
+              speed: playbackSpeed,
+              vip_key: settings.vipKey || ''
+            })
+          });
+          
+          if (res.ok) {
+            const blob = await res.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            if (audioRef.current) {
+              audioRef.current.src = audioUrl;
+              audioRef.current.playbackRate = playbackSpeed;
+              audioRef.current.play().catch(e => {
+                console.error("Cloud audio options failed:", e);
+                setPlaybackEngine('local');
+              });
+            }
+          } else {
+            setPlaybackEngine('local');
+          }
+        } catch (err) {
+          console.error("Cloud TTS failed:", err);
+          setPlaybackEngine('local');
+        }
+      };
+
+      fetchCloudTTS();
+    }
+  }, [isPlaying, currentParagraphIndex, playbackEngine, selectedVoice, activeChapterData, playbackSpeed]);
+
   // Helper to dynamically get EPUB host mapped from settings.apiHost
   const getEpubHost = () => {
     const host = (settings.apiHost || 'https://api.tienhiep.lyvuha.com').replace(/\/$/, '');
@@ -90,12 +405,17 @@ export default function OptionsApp() {
 
     try {
       const epubHost = getEpubHost();
+      const fetchHeaders = {};
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const authRes = await new Promise(resolve => chrome.storage.local.get(['serverAuthToken'], resolve));
+        if (authRes.serverAuthToken) fetchHeaders['Authorization'] = `Bearer ${authRes.serverAuthToken}`;
+      }
+      fetchHeaders['X-VIP-Key'] = settings.vipKey || '';
+
       const response = await fetch(`${epubHost}/api/epub/translate`, {
         method: 'POST',
-        headers: {
-          'X-VIP-Key': settings.vipKey || ''
-        },
-        body: formData
+        body: formData,
+        headers: fetchHeaders
       });
       if (!response.ok) {
         const errorText = await response.json();
@@ -155,12 +475,17 @@ export default function OptionsApp() {
 
     try {
       const epubHost = getEpubHost();
+      const fetchHeaders = {};
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const authRes = await new Promise(resolve => chrome.storage.local.get(['serverAuthToken'], resolve));
+        if (authRes.serverAuthToken) fetchHeaders['Authorization'] = `Bearer ${authRes.serverAuthToken}`;
+      }
+      fetchHeaders['X-VIP-Key'] = settings.vipKey || '';
+
       const response = await fetch(`${epubHost}/api/epub/convert-txt`, {
         method: 'POST',
-        headers: {
-          'X-VIP-Key': settings.vipKey || ''
-        },
-        body: formData
+        body: formData,
+        headers: fetchHeaders
       });
       if (!response.ok) {
         const errorText = await response.json();
@@ -199,12 +524,17 @@ export default function OptionsApp() {
 
     try {
       const epubHost = getEpubHost();
+      const fetchHeaders = {};
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const authRes = await new Promise(resolve => chrome.storage.local.get(['serverAuthToken'], resolve));
+        if (authRes.serverAuthToken) fetchHeaders['Authorization'] = `Bearer ${authRes.serverAuthToken}`;
+      }
+      fetchHeaders['X-VIP-Key'] = settings.vipKey || '';
+
       const response = await fetch(`${epubHost}/api/epub/optimize`, {
         method: 'POST',
-        headers: {
-          'X-VIP-Key': settings.vipKey || ''
-        },
-        body: formData
+        body: formData,
+        headers: fetchHeaders
       });
       if (!response.ok) {
         const errorText = await response.json();
@@ -233,9 +563,17 @@ export default function OptionsApp() {
     if (!apiHost) return;
     try {
       const cleanedHost = apiHost.replace(/\/$/, '');
+      let token = '';
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const res = await new Promise(resolve => chrome.storage.local.get(['serverAuthToken'], resolve));
+        token = res.serverAuthToken;
+      }
+      const headers = { 'Accept': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      
       const res = await fetch(`${cleanedHost}/api/auth/me`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers,
         credentials: 'include'
       });
       if (res.ok) {
@@ -397,6 +735,7 @@ export default function OptionsApp() {
           <nav className="px-3 mt-4 space-y-1">
             {[
               { id: 'general', label: 'Cài đặt chung', icon: 'settings' },
+              { id: 'reader', label: 'Đọc truyện & TTS', icon: 'menu_book' },
               { id: 'epub', label: 'Công cụ EPUB (VIP)', icon: 'auto_stories' },
               { id: 'ai', label: 'Trợ lý AI Config', icon: 'forum' },
               { id: 'search', label: 'Tra cứu Database', icon: 'search' },
@@ -449,6 +788,7 @@ export default function OptionsApp() {
         <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0 select-none">
           <h2 className="text-lg font-extrabold text-gray-800 uppercase tracking-wide">
             {activeTab === 'general' && 'Cấu hình Chung'}
+            {activeTab === 'reader' && 'Trình Đọc Truyện & Nghe Nhạc AI'}
             {activeTab === 'epub' && 'Hộp công cụ EPUB VIP'}
             {activeTab === 'ai' && 'Cấu hình Trợ Lý AI'}
             {activeTab === 'search' && 'Tra cứu Cơ Sở Dữ Liệu Sách'}
@@ -508,7 +848,7 @@ export default function OptionsApp() {
                     </p>
                     <div className="flex gap-2 pt-1">
                       <input 
-                        type="password"
+                        type="text"
                         placeholder="Nhập mã kích hoạt VIP (ví dụ: VIP2026)"
                         id="vip_code_options_input"
                         className="flex-1 h-9 px-3 border border-gray-300 rounded-lg text-xs outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20 font-mono text-center uppercase tracking-widest"
@@ -657,6 +997,307 @@ export default function OptionsApp() {
 
               </div>
 
+            </div>
+          )}
+
+          {/* TAB: FULL-SCREEN NOVEL READER & TTS PLAYBACK */}
+          {activeTab === 'reader' && (
+            <div className="w-full max-w-5xl mx-auto flex flex-col lg:flex-row gap-6 h-[calc(100vh-170px)] overflow-hidden animate-fade-in">
+              {/* Left Sidebar: Controls & Info */}
+              <div className="w-full lg:w-80 shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col justify-between overflow-y-auto custom-scrollbar">
+                <div className="space-y-5">
+                  {/* Novel Cover & Title */}
+                  <div className="flex flex-col items-center text-center space-y-3 pb-3 border-b border-gray-100">
+                    {activeChapterData?.cover ? (
+                      <img 
+                        src={activeChapterData.cover} 
+                        alt="Book Cover" 
+                        className="w-24 aspect-[3/4] object-cover rounded-lg shadow-md border border-gray-100 animate-fade-in" 
+                      />
+                    ) : (
+                      <div className="w-24 aspect-[3/4] bg-gradient-to-br from-gray-700 to-gray-900 rounded-lg flex flex-col justify-between p-3 text-center text-white border border-gray-600 shadow-md">
+                        <span className="text-[8px] font-bold tracking-widest text-yellow-500 uppercase">Antigravity</span>
+                        <span className="material-symbols-outlined text-3xl text-gray-400 self-center">menu_book</span>
+                        <span className="text-[8px] text-gray-400 font-semibold truncate">{activeChapterData?.author || 'Tác giả ẩn'}</span>
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="text-xs font-extrabold text-gray-800 line-clamp-1">{activeChapterData?.novelTitle || 'Truyện Ngoài'}</h3>
+                      <p className="text-[11px] font-bold text-yellow-600 mt-0.5 line-clamp-1">{activeChapterData?.chapterTitle || 'Chưa chọn chương'}</p>
+                    </div>
+                  </div>
+
+                  {/* Sync Action */}
+                  <div className="space-y-1.5">
+                    <button 
+                      onClick={syncWithActiveTab}
+                      className="w-full h-9 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm shadow-gray-900/10 active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">sync</span>
+                      Đồng bộ từ Trình duyệt
+                    </button>
+                    <p className="text-[9px] text-gray-400 leading-normal text-center">
+                      * Bắt buộc click khi đổi tab đọc trên Chrome để nhận diện trang.
+                    </p>
+                  </div>
+
+                  {/* Settings section */}
+                  <div className="space-y-2.5 pt-1 border-t border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Cấu hình hiển thị</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'dark', label: 'Tối', bg: 'bg-gray-900 border-gray-800 text-white' },
+                        { id: 'sepia', label: 'Giấy', bg: 'bg-[#f4ecd8] border-[#e2d5b6] text-amber-950' },
+                        { id: 'light', label: 'Sáng', bg: 'bg-white border-gray-200 text-gray-800' }
+                      ].map(theme => (
+                        <button
+                          key={theme.id}
+                          onClick={() => setReaderTheme(theme.id)}
+                          className={`py-1 px-1.5 rounded-lg border text-[10px] font-bold transition-all text-center cursor-pointer ${
+                            readerTheme === theme.id 
+                              ? 'ring-2 ring-yellow-500 font-extrabold scale-[1.03]' 
+                              : 'opacity-70 hover:opacity-100'
+                          } ${theme.bg}`}
+                        >
+                          {theme.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Font size control */}
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-xs font-semibold text-gray-700">Cỡ chữ</span>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => setFontSize(prev => Math.max(12, prev - 1))}
+                          className="h-6 w-6 bg-gray-100 hover:bg-gray-200 active:scale-90 rounded flex items-center justify-center text-[10px] font-bold text-gray-700 cursor-pointer"
+                        >
+                          A-
+                        </button>
+                        <span className="text-[11px] font-bold w-7 text-center text-gray-800">{fontSize}px</span>
+                        <button 
+                          onClick={() => setFontSize(prev => Math.min(32, prev + 1))}
+                          className="h-6 w-6 bg-gray-100 hover:bg-gray-200 active:scale-90 rounded flex items-center justify-center text-[10px] font-bold text-gray-700 cursor-pointer"
+                        >
+                          A+
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Navigation controls */}
+                  <div className="space-y-2 pt-1 border-t border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Chuyển chương nhanh</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => {
+                          sendTabMessage({ action: "TRIGGER_PREV" });
+                        }}
+                        className="py-1.5 bg-gray-50 border border-gray-200 hover:bg-gray-100 active:scale-95 rounded-lg text-xs font-bold text-gray-700 flex items-center justify-center gap-0.5 transition-all cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">navigate_before</span>
+                        Chương Trước
+                      </button>
+                      <button 
+                        onClick={triggerAutoNextChapter}
+                        className="py-1.5 bg-yellow-500 hover:bg-yellow-600 active:scale-95 rounded-lg text-xs font-bold text-gray-950 flex items-center justify-center gap-0.5 transition-all cursor-pointer shadow-sm shadow-yellow-500/10"
+                      >
+                        Chương Sau
+                        <span className="material-symbols-outlined text-[16px]">navigate_next</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Table of Contents Section */}
+                  <div className="space-y-2 pt-2 border-t border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-between">
+                      Mục lục chương
+                      {tocChapters.length > 0 && (
+                        <span className="bg-yellow-500/10 text-yellow-600 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                          {tocChapters.length} chương
+                        </span>
+                      )}
+                    </span>
+                    {tocLoading ? (
+                      <div className="flex items-center justify-center py-6 gap-2">
+                        <span className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full"></span>
+                        <span className="text-xs text-gray-400 font-medium">Đang tải mục lục...</span>
+                      </div>
+                    ) : tocChapters.length > 0 ? (
+                      <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-1.5 space-y-1 bg-gray-50/50 custom-scrollbar text-xs">
+                        {tocChapters.map((chap, index) => {
+                          // Simple check: if chapter title from tab contains chap.title or matches
+                          const isCurrent = activeChapterData?.chapterTitle && 
+                                            (activeChapterData.chapterTitle.includes(chap.title) || 
+                                             chap.title.includes(activeChapterData.chapterTitle.replace(/第\s*\d+\s*[章页].*$/, '').trim()));
+                          
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => {
+                                if (typeof chrome !== 'undefined' && chrome.tabs && sourceTabId) {
+                                  chrome.tabs.update(sourceTabId, { url: chap.url, active: true });
+                                }
+                              }}
+                              className={`w-full text-left py-1.5 px-2 rounded transition-all truncate block cursor-pointer text-[11px] ${
+                                isCurrent 
+                                  ? 'bg-yellow-500/15 text-yellow-700 font-extrabold border-l-2 border-yellow-500' 
+                                  : 'hover:bg-gray-100 text-gray-600'
+                              }`}
+                              title={chap.title}
+                            >
+                              {chap.title}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-gray-400 text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200 leading-relaxed px-2">
+                        Chưa nhận diện được mục lục. Nhấn "Đồng bộ từ Trình duyệt" khi ở tab đọc truyện để nhận diện.
+                      </p>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Info footer */}
+                <div className="pt-3 border-t border-gray-100 text-center">
+                  <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider block">Trình phát nhạc rảnh tay</span>
+                </div>
+              </div>
+
+              {/* Right Panel: Reading Board & Audio Playback */}
+              <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
+                
+                {/* Reading Canvas */}
+                <div className={`flex-1 overflow-y-auto p-8 custom-scrollbar ${
+                  readerTheme === 'dark' ? 'bg-[#18181a] text-[#e3e3e6]' :
+                  readerTheme === 'sepia' ? 'bg-[#faf6eb] text-[#433422]' :
+                  'bg-[#fcfcfc] text-[#1c1c1e]'
+                }`}>
+                  {!activeChapterData || !activeChapterData.paragraphs?.length ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-3">
+                      <span className="material-symbols-outlined text-5xl text-gray-400 animate-pulse">menu_book</span>
+                      <h4 className="text-sm font-bold text-gray-700">Chưa có nội dung truyện để hiển thị</h4>
+                      <p className="text-xs text-gray-500 max-w-sm leading-relaxed text-center">
+                        Hãy mở tab truyện chữ cần đọc trên trình duyệt (ví dụ: hjwzw.com, truyenfull, v.v.), sau đó nhấn nút "Đồng bộ từ Trình duyệt" ở cột bên trái để tải chữ vào đây.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-w-2xl mx-auto space-y-6 select-text leading-relaxed font-merriweather" style={{ fontSize: `${fontSize}px` }}>
+                      <h1 className="text-xl md:text-2xl font-bold font-sans text-center mb-8 border-b pb-4 opacity-90" style={{ borderBottomColor: readerTheme === 'dark' ? '#2e2e30' : readerTheme === 'sepia' ? '#ebdcb9' : '#e5e7eb' }}>
+                        {activeChapterData.chapterTitle}
+                      </h1>
+                      {activeChapterData.paragraphs.map((para, idx) => (
+                        <p 
+                          key={idx}
+                          onClick={() => setCurrentParagraphIndex(idx)}
+                          className={`cursor-pointer px-3 py-2.5 rounded-lg transition-all ${
+                            currentParagraphIndex === idx 
+                              ? 'bg-yellow-500/20 ring-1 ring-yellow-500 font-medium' 
+                              : 'hover:bg-yellow-500/5'
+                          }`}
+                        >
+                          {para}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Control Bar */}
+                <div className="h-20 bg-gray-950 text-white border-t border-gray-800 px-6 flex items-center justify-between shrink-0 select-none">
+                  {/* Left: Playback Info */}
+                  <div className="flex items-center gap-4 min-w-[200px]">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Đang phát (TTS)</span>
+                      <span className="text-xs font-semibold text-white line-clamp-1 max-w-[180px]">
+                        {activeChapterData?.paragraphs?.[currentParagraphIndex] || 'Không có âm thanh.'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Center: Play/Pause controls */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setCurrentParagraphIndex(prev => Math.max(0, prev - 1))}
+                        disabled={!activeChapterData}
+                        className="material-symbols-outlined text-white hover:text-yellow-500 disabled:opacity-50 text-2xl transition-colors cursor-pointer"
+                      >
+                        skip_previous
+                      </button>
+                      <button 
+                        onClick={() => setIsPlaying(!isPlaying)}
+                        disabled={!activeChapterData}
+                        className="h-10 w-10 bg-yellow-500 hover:bg-yellow-600 active:scale-95 text-gray-950 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-2xl font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>
+                          {isPlaying ? 'pause' : 'play_arrow'}
+                        </span>
+                      </button>
+                      <button 
+                        onClick={handleNextParagraph}
+                        disabled={!activeChapterData}
+                        className="material-symbols-outlined text-white hover:text-yellow-500 disabled:opacity-50 text-2xl transition-colors cursor-pointer"
+                      >
+                        skip_next
+                      </button>
+                    </div>
+                    {activeChapterData && (
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        Đoạn {currentParagraphIndex + 1} / {activeChapterData.paragraphs.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: Audio options (Engine, Speed, Voice) */}
+                  <div className="flex items-center gap-4 min-w-[250px] justify-end">
+                    <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg border border-gray-700">
+                      <span className="material-symbols-outlined text-gray-400 text-sm">speed</span>
+                      <select 
+                        value={playbackSpeed}
+                        onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                        className="bg-transparent text-xs text-white outline-none font-bold cursor-pointer"
+                      >
+                        <option value="0.75" className="bg-gray-800 text-white">0.75x</option>
+                        <option value="1.0" className="bg-gray-800 text-white">1.0x</option>
+                        <option value="1.25" className="bg-gray-800 text-white">1.25x</option>
+                        <option value="1.5" className="bg-gray-800 text-white">1.5x</option>
+                        <option value="1.75" className="bg-gray-800 text-white">1.75x</option>
+                        <option value="2.0" className="bg-gray-800 text-white">2.0x</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg border border-gray-700">
+                      <span className="material-symbols-outlined text-gray-400 text-sm">settings_voice</span>
+                      <select 
+                        value={selectedVoice}
+                        onChange={(e) => setSelectedVoice(e.target.value)}
+                        className="bg-transparent text-xs text-white outline-none font-bold max-w-[100px] truncate cursor-pointer"
+                      >
+                        {voices.map((v, i) => (
+                          <option key={i} value={v.name} className="bg-gray-800 text-white">{v.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg border border-gray-700">
+                      <span className="material-symbols-outlined text-gray-400 text-sm">dns</span>
+                      <select 
+                        value={playbackEngine}
+                        onChange={(e) => setPlaybackEngine(e.target.value)}
+                        className="bg-transparent text-xs text-white outline-none font-bold cursor-pointer"
+                      >
+                        <option value="local" className="bg-gray-800 text-white">Local</option>
+                        <option value="cloud" className="bg-gray-800 text-white">AI Cloud</option>
+                      </select>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
             </div>
           )}
 

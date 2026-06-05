@@ -1,7 +1,7 @@
 import logging
 from flask import Flask, request, jsonify, render_template_string, session
 from flask_cors import CORS
-import sqlite3, math, os, sys, hashlib
+import sqlite3, math, os, sys, hashlib, re, unicodedata
 import bcrypt, jwt, secrets, hmac, time, json, requests
 from datetime import datetime, timedelta
 from functools import wraps
@@ -12,7 +12,7 @@ import smtplib, threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-load_dotenv()  # Load variables from .env
+load_dotenv(override=True)  # Load variables from .env and override shell defaults
 
 # Structured logging
 logging.basicConfig(
@@ -560,6 +560,8 @@ def api_books():
         sort = "site_count DESC"
 
     where, params = [], []
+    fts_match_expr = None
+    has_chinese = False
 
     # FTS5 for Vietnamese (tokenizes correctly), indexed LIKE for Chinese (CJK single-char tokenization breaks FTS phrase search)
     if q:
@@ -585,21 +587,13 @@ def api_books():
             fts_query = q_clean.replace('"', '').replace("'", '')
             if fts_query:
                 if search_field == "title":
-                    where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}"'
-                    params.append(match_expr)
+                    fts_match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}"'
                 elif search_field == "author":
-                    where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = f'author_hanviet_clean:"{fts_query}"'
-                    params.append(match_expr)
+                    fts_match_expr = f'author_hanviet_clean:"{fts_query}"'
                 elif search_field == "hanviet":
-                    where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = f'title_hanviet_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
-                    params.append(match_expr)
+                    fts_match_expr = f'title_hanviet_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
                 elif search_field == "vietphrase":
-                    where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = f'title_vietphrase_clean:"{fts_query}"'
-                    params.append(match_expr)
+                    fts_match_expr = f'title_vietphrase_clean:"{fts_query}"'
                 elif search_field == "chinese":
                     where.append("(title LIKE ? OR author LIKE ?)")
                     pq = "%" + q + "%"
@@ -609,9 +603,7 @@ def api_books():
                     pq = "%" + q + "%"
                     params += [pq, pq, pq]
                 else:  # all fields (default)
-                    where.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
-                    match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
-                    params.append(match_expr)
+                    fts_match_expr = f'title_hanviet_clean:"{fts_query}" OR title_vietphrase_clean:"{fts_query}" OR author_hanviet_clean:"{fts_query}"'
 
     if category:
         where.append("categories LIKE ?")
@@ -633,12 +625,112 @@ def api_books():
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
-    # Build dynamic order by clause if search query is active
-    order_by_sql = sort
-    order_params = []
-    if q:
-        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in q)
-        if has_chinese:
+    if fts_match_expr:
+        # FTS5 search path with JOIN, relevance ranking, and post-filtering
+        cache_key = ("fts_search_v2", fts_match_expr, where_sql, page, per_page, tuple(params), sort, q)
+        cached_res = query_cache.get(cache_key)
+        if cached_res is not None:
+            return jsonify(cached_res)
+
+        conn = get_db()
+        # Fetch up to 1000 candidates for Python-side filtering
+        query = f"""
+            SELECT b.*, f.score
+            FROM books b
+            JOIN (
+                SELECT rowid, bm25(books_fts) AS score
+                FROM books_fts
+                WHERE books_fts MATCH ?
+            ) f ON b.id = f.rowid
+            {where_sql}
+            LIMIT 1000
+        """
+        rows = conn.execute(query, [fts_match_expr] + params).fetchall()
+
+        if not rows:
+            res_data = {"total": 0, "page": 1, "pages": 1, "books": []}
+            query_cache.set(cache_key, res_data)
+            return jsonify(res_data)
+
+        # Dynamic threshold calculation based on best candidate score
+        scores = [r['score'] for r in rows]
+        best_score = min(scores)
+        threshold = best_score * 0.28  # 28% of best score (most negative is best)
+
+        has_accents = any(c != clean_vietnamese_query(c) for c in q)
+
+        def clean_text_for_tier(txt):
+            if not txt:
+                return ""
+            txt = txt.replace('đ', 'd').replace('Đ', 'D')
+            import unicodedata
+            txt = "".join(c for c in unicodedata.normalize('NFKD', txt) if not unicodedata.combining(c)).lower()
+            return " ".join(re.sub(r'[^a-z0-9\s]', ' ', txt).split())
+
+        q_clean_tier = clean_text_for_tier(q)
+        q_norm = q.lower().strip()
+
+        def get_tier(book):
+            t_hv_clean = clean_text_for_tier(book.get('title_hanviet', ''))
+            t_vp_clean = clean_text_for_tier(book.get('title_vietphrase', ''))
+            if t_hv_clean == q_clean_tier or t_vp_clean == q_clean_tier:
+                return 1
+            if t_hv_clean.startswith(q_clean_tier) or t_vp_clean.startswith(q_clean_tier):
+                return 2
+            if q_clean_tier in t_hv_clean or q_clean_tier in t_vp_clean:
+                return 3
+            return 4
+
+        filtered_books = []
+        for r in rows:
+            book_dict = dict(r)
+            tier = get_tier(book_dict)
+            score = book_dict['score']
+
+            # 1. Accent collision check
+            if has_accents:
+                t_hv = (book_dict.get('title_hanviet') or '').lower()
+                t_vp = (book_dict.get('title_vietphrase') or '').lower()
+                auth = (book_dict.get('author_hanviet') or '').lower()
+                desc = (book_dict.get('description') or '').lower()
+                if q_norm not in t_hv and q_norm not in t_vp and q_norm not in auth and q_norm not in desc:
+                    continue
+
+            # 2. Score threshold check for Tier 3 and Tier 4 (keeps Tiers 1 and 2 intact)
+            if tier in (3, 4) and score > threshold:
+                continue
+
+            book_dict['tier'] = tier
+            filtered_books.append(book_dict)
+
+        # Sorting
+        if sort == "title ASC":
+            filtered_books.sort(key=lambda x: (x.get('title_hanviet') or '').lower())
+        elif sort == "title DESC":
+            filtered_books.sort(key=lambda x: (x.get('title_hanviet') or '').lower(), reverse=True)
+        elif sort == "chapters_max DESC":
+            filtered_books.sort(key=lambda x: x.get('chapters_max') or 0, reverse=True)
+        elif sort == "word_count_max DESC":
+            filtered_books.sort(key=lambda x: x.get('word_count_max') or 0, reverse=True)
+        else:
+            # Default: Tier ASC, FTS5 score ASC, site_count DESC
+            filtered_books.sort(key=lambda x: (x['tier'], x['score'], -x['site_count']))
+
+        # Pagination slicing
+        total = len(filtered_books)
+        pages = max(1, math.ceil(total / per_page))
+        offset = (page - 1) * per_page
+        books_page = filtered_books[offset : offset + per_page]
+
+        res_data = {"total": total, "page": page, "pages": pages, "books": books_page}
+        query_cache.set(cache_key, res_data)
+        return jsonify(res_data)
+
+    else:
+        # Standard path (no FTS, or non-FTS query)
+        order_by_sql = sort
+        order_params = []
+        if q and has_chinese:
             order_by_sql = f"""
                 CASE 
                     WHEN title = ? THEN 1
@@ -647,57 +739,43 @@ def api_books():
                 END ASC, {sort}
             """
             order_params = [q, q + "%"]
-        else:
-            q_clean = clean_vietnamese_query(q)
-            fts_query = q_clean.replace('"', '').replace("'", '')
-            if fts_query:
-                order_by_sql = f"""
-                    CASE 
-                        WHEN title_hanviet_clean = ? OR title_vietphrase_clean = ? THEN 1
-                        WHEN title_hanviet_clean LIKE ? OR title_vietphrase_clean LIKE ? THEN 2
-                        ELSE 3
-                    END ASC, {sort}
-                """
-                order_params = [fts_query, fts_query, fts_query + "%", fts_query + "%"]
 
-    # Check cache for identical search results to save database queries
-    cache_key = (where_sql, order_by_sql, page, per_page, tuple(params), tuple(order_params))
-    cached_res = query_cache.get(cache_key)
-    if cached_res is not None:
-        return jsonify(cached_res)
+        # Check cache
+        cache_key = (where_sql, order_by_sql, page, per_page, tuple(params), tuple(order_params))
+        cached_res = query_cache.get(cache_key)
+        if cached_res is not None:
+            return jsonify(cached_res)
 
-    # 1. Fetch total count (cached separately to avoid slow SQLite COUNT scans)
-    count_cache_key = (where_sql, tuple(params))
-    total = count_cache.get(count_cache_key)
-    if total is None:
+        # 1. Fetch total count
+        count_cache_key = (where_sql, tuple(params))
+        total = count_cache.get(count_cache_key)
+        if total is None:
+            conn = get_db()
+            total = conn.execute(
+                "SELECT COUNT(*) FROM books " + where_sql, params
+            ).fetchone()[0]
+            count_cache.set(count_cache_key, total)
+
+        pages = max(1, math.ceil(total / per_page))
+        if pages > MAX_PAGES_CEILING:
+            pages = MAX_PAGES_CEILING
+            total = min(total, MAX_PAGES_CEILING * per_page)
+
+        offset = (page - 1) * per_page
+
+        # 2. Query page rows
         conn = get_db()
-        total = conn.execute(
-            "SELECT COUNT(*) FROM books " + where_sql, params
-        ).fetchone()[0]
-        count_cache.set(count_cache_key, total)
+        rows = conn.execute(
+            "SELECT * FROM books " + where_sql +
+            " ORDER BY " + order_by_sql +
+            " LIMIT ? OFFSET ?",
+            params + order_params + [per_page, offset]
+        ).fetchall()
 
-    pages  = max(1, math.ceil(total / per_page))
-    if pages > MAX_PAGES_CEILING:
-        pages = MAX_PAGES_CEILING
-        total = min(total, MAX_PAGES_CEILING * per_page)
-        
-    offset = (page - 1) * per_page
-
-    # 2. Query page rows
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM books " + where_sql +
-        " ORDER BY " + order_by_sql +
-        " LIMIT ? OFFSET ?",
-        params + order_params + [per_page, offset]
-    ).fetchall()
-
-    # 3. No enrichment here! Return the basic rows from the active database directly
-    books = [dict(r) for r in rows]
-
-    res_data = {"total": total, "page": page, "pages": pages, "books": books}
-    query_cache.set(cache_key, res_data)
-    return jsonify(res_data)
+        books = [dict(r) for r in rows]
+        res_data = {"total": total, "page": page, "pages": pages, "books": books}
+        query_cache.set(cache_key, res_data)
+        return jsonify(res_data)
 
 @app.route("/api/book/<int:book_id>/translations")
 def api_book_translations(book_id):
@@ -933,8 +1011,52 @@ def auth_reset_password():
 
     return jsonify({"message": "Đổi mật khẩu thành công! Hãy đăng nhập lại."})
 
-@app.route("/api/auth/google/callback", methods=["POST"])
+@app.route("/api/auth/google/login")
+def auth_google_login():
+    """Redirect to Google OAuth2 Consent Screen (Implicit Flow for ID Token)."""
+    client_id = GOOGLE_OAUTH_CONFIG.get("client_id")
+    redirect_uri = GOOGLE_OAUTH_CONFIG.get("redirect_uri")
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=id_token&scope=email%20profile&nonce=random123&prompt=select_account"
+    return redirect(auth_url)
+
+@app.route("/api/auth/google/callback", methods=["GET", "POST"])
 def auth_google_callback():
+    """Handle Google OAuth 2.0 ID Token verification and login/register."""
+    if request.method == "GET":
+        # Google redirects here with #id_token=... in the fragment.
+        # Server can't read fragments, so we serve a tiny JS page to POST it back.
+        return """
+        <html><body>
+        <script>
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const idToken = params.get('id_token');
+            if (idToken) {
+                fetch('/api/auth/google/callback', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ credential: idToken })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.access_token) {
+                        localStorage.setItem('accessToken', data.access_token);
+                        localStorage.setItem('user', JSON.stringify(data.user));
+                        window.location.href = '/';
+                    } else {
+                        document.body.innerHTML = "Lỗi đăng nhập: " + (data.error || "Unknown");
+                    }
+                })
+                .catch(err => {
+                    document.body.innerHTML = "Lỗi kết nối: " + err;
+                });
+            } else {
+                document.body.innerHTML = "Không tìm thấy token từ Google.";
+            }
+        </script>
+        </body></html>
+        """
+
     """Handle Google OAuth 2.0 ID Token verification and login/register."""
     if not GOOGLE_OAUTH_CONFIG.get("enabled"):
         return jsonify({"error": "Google login is currently disabled."}), 400
@@ -1199,11 +1321,23 @@ def api_payment_create():
     data = request.json or {}
     plan = data.get("plan", "month")
     
-    if plan not in VIP_PLANS:
-        return jsonify({"error": "Gói VIP không hợp lệ."}), 400
-    
-    plan_info = VIP_PLANS[plan]
-    amount = plan_info["price"]
+    if plan.startswith("topup_"):
+        try:
+            amount = int(plan.split("_")[1])
+            if amount < 10000 or amount > 10000000:
+                return jsonify({"error": "Số tiền nạp tối thiểu là 10.000đ và tối đa là 10.000.000đ."}), 400
+            plan_info = {
+                "name_vi": f"Nạp {amount:,}đ số dư API".replace(",", "."),
+                "price": amount,
+                "duration_days": 0
+            }
+        except Exception:
+            return jsonify({"error": "Định dạng gói nạp tiền không hợp lệ."}), 400
+    else:
+        if plan not in VIP_PLANS:
+            return jsonify({"error": "Gói VIP không hợp lệ."}), 400
+        plan_info = VIP_PLANS[plan]
+        amount = plan_info["price"]
     
     # Generate unique numeric order ID for PayOS compatibility (must be integer <= 9007199254740991)
     # Using timestamp + user_id segment to prevent collisions
@@ -1460,15 +1594,26 @@ def _process_payment_confirmation(order_id, amount):
     conn.commit()
     conn.close()
     
-    # Activate VIP
-    activate_vip(payment["user_id"], payment["plan"])
-    
-    # Update session if the user is currently logged in
-    if session.get("user_id") == payment["user_id"]:
-        session["vip_status"] = 1
-    
-    print(f"[PAYMENT] ✅ Order {order_id} completed — User #{payment['user_id']} → VIP {payment['plan']}")
-    return jsonify({"success": True, "message": "Payment confirmed, VIP activated!"})
+    # Activate VIP or Topup Balance
+    if payment["plan"].startswith("topup_"):
+        conn = get_user_db_conn()
+        conn.execute(
+            "UPDATE users SET api_balance = COALESCE(api_balance, 0.0) + ? WHERE id = ?",
+            (payment["amount"], payment["user_id"])
+        )
+        conn.commit()
+        conn.close()
+        print(f"[PAYMENT] ✅ API Topup {payment['amount']} VNĐ completed for User #{payment['user_id']}")
+        return jsonify({"success": True, "message": f"Nạp thành công {payment['amount']:,}đ vào số dư API!".replace(",", ".")})
+    else:
+        activate_vip(payment["user_id"], payment["plan"])
+        
+        # Update session if the user is currently logged in
+        if session.get("user_id") == payment["user_id"]:
+            session["vip_status"] = 1
+        
+        print(f"[PAYMENT] ✅ Order {order_id} completed — User #{payment['user_id']} → VIP {payment['plan']}")
+        return jsonify({"success": True, "message": "Payment confirmed, VIP activated!"})
 
 @app.route("/api/payment/confirm-manual", methods=["POST"])
 def api_payment_confirm_manual():
@@ -2218,6 +2363,344 @@ def start_email_polling_worker():
             
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
+
+
+# ============================================================
+# 💳 DEVELOPER API GATEWAY & API KEYS SYSTEM (API STORE)
+# ============================================================
+
+def require_api_key_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid Authorization header. Must be 'Bearer sk-tc-...'"}), 401
+        
+        api_key = auth_header[7:].strip()
+        if not api_key.startswith("sk-tc-"):
+            return jsonify({"error": "Invalid API key format. Key must start with 'sk-tc-'"}), 401
+            
+        conn = get_user_db_conn()
+        key_record = conn.execute(
+            "SELECT k.*, u.api_balance FROM api_keys k JOIN users u ON k.user_id = u.id WHERE k.api_key = ? AND k.status = 'active'", 
+            (api_key,)
+        ).fetchone()
+        
+        if not key_record:
+            conn.close()
+            return jsonify({"error": "API Key not found, inactive, or revoked."}), 401
+            
+        balance = key_record["api_balance"] if key_record["api_balance"] is not None else 0.0
+        if balance <= 0.0:
+            conn.close()
+            return jsonify({
+                "error": f"Tài khoản hết số dư API (Số dư hiện tại: {balance:.2f}đ). Vui lòng nạp thêm tiền tại website để tiếp tục sử dụng."
+            }), 402
+            
+        # Update last_used_at
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute("UPDATE api_keys SET last_used_at = ? WHERE api_key = ?", (now, api_key))
+        conn.commit()
+        conn.close()
+        
+        request.api_key = api_key
+        request.api_user_id = key_record["user_id"]
+        request.api_balance = balance
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/developer/keys', methods=['GET'])
+def api_dev_keys_list():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Vui lòng đăng nhập."}), 401
+        
+    conn = get_user_db_conn()
+    keys = conn.execute(
+        "SELECT api_key, name, status, created_at, last_used_at FROM api_keys WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC", 
+        (user["id"],)
+    ).fetchall()
+    user_row = conn.execute("SELECT api_balance FROM users WHERE id = ?", (user["id"],)).fetchone()
+    conn.close()
+    
+    balance = user_row["api_balance"] if user_row and user_row["api_balance"] is not None else 0.0
+    return jsonify({
+        "balance": balance,
+        "keys": [dict(k) for k in keys]
+    })
+
+@app.route('/api/developer/keys/create', methods=['POST'])
+def api_dev_keys_create():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Vui lòng đăng nhập."}), 401
+        
+    data = request.json or {}
+    name = data.get("name", "Default Key").strip()[:50]
+    
+    import secrets
+    new_key = f"sk-tc-{secrets.token_hex(16)}"
+    
+    conn = get_user_db_conn()
+    conn.execute(
+        "INSERT INTO api_keys (user_id, api_key, name, status) VALUES (?, ?, ?, 'active')",
+        (user["id"], new_key, name)
+    )
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        "success": True,
+        "api_key": new_key,
+        "name": name
+    })
+
+@app.route('/api/developer/keys/delete', methods=['POST'])
+def api_dev_keys_delete():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Vui lòng đăng nhập."}), 401
+        
+    data = request.json or {}
+    api_key = data.get("api_key", "").strip()
+    
+    if not api_key:
+        return jsonify({"error": "Thiếu API Key cần xóa."}), 400
+        
+    conn = get_user_db_conn()
+    conn.execute(
+        "UPDATE api_keys SET status = 'revoked' WHERE user_id = ? AND api_key = ?",
+        (user["id"], api_key)
+    )
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"success": True})
+
+@app.route('/api/developer/usage', methods=['GET'])
+def api_dev_usage():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Vui lòng đăng nhập."}), 401
+        
+    conn = get_user_db_conn()
+    keys_rows = conn.execute("SELECT api_key FROM api_keys WHERE user_id = ?", (user["id"],)).fetchall()
+    keys = [k["api_key"] for k in keys_rows]
+    
+    if not keys:
+        conn.close()
+        return jsonify({"usage": []})
+        
+    placeholders = ",".join(["?"] * len(keys))
+    usage = conn.execute(
+        f"SELECT * FROM api_usage WHERE api_key IN ({placeholders}) ORDER BY timestamp DESC LIMIT 100",
+        keys
+    ).fetchall()
+    conn.close()
+    
+    return jsonify({
+        "usage": [dict(u) for u in usage]
+    })
+
+def deduct_developer_balance(api_key, amount, model, tokens=0, status_code=200):
+    conn = get_user_db_conn()
+    try:
+        conn.execute(
+            "INSERT INTO api_usage (api_key, model, tokens, cost, status_code) VALUES (?, ?, ?, ?, ?)",
+            (api_key, model, tokens, amount, status_code)
+        )
+        conn.execute(
+            "UPDATE users SET api_balance = api_balance - ? WHERE id = (SELECT user_id FROM api_keys WHERE api_key = ?)",
+            (amount, api_key)
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[API GATEWAY ERROR] Failed to deduct balance: {e}")
+    finally:
+        conn.close()
+
+# OpenAI-Compatible API: v1/chat/completions (Proxy to Gemini)
+@app.route('/v1/chat/completions', methods=['POST'])
+@require_api_key_auth
+def openai_chat_completions():
+    api_key = request.api_key
+    data = request.json or {}
+    messages = data.get("messages", [])
+    model = data.get("model", "gemini-1.5-flash")
+    
+    if not messages:
+        return jsonify({"error": "Missing messages array"}), 400
+        
+    prompt_length = sum(len(m.get("content", "")) for m in messages)
+    cost = max(20.0, prompt_length * 0.02) # Min 20đ, then 0.02đ per character
+    
+    if request.api_balance < cost:
+        return jsonify({"error": f"Số dư không đủ cho yêu cầu này. Chi phí ước tính: {cost:.2f}đ, Số dư hiện tại: {request.api_balance:.2f}đ"}), 402
+
+    if not ADMIN_GEMINI_KEY:
+        return jsonify({"error": "Hệ thống dịch chưa được Admin cấu hình khóa Gemini."}), 501
+        
+    try:
+        contents = []
+        system_instruction = ""
+        
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content", "")
+            if role == "system":
+                system_instruction = content
+            else:
+                contents.append({
+                    "role": "user" if role == "user" else "model",
+                    "parts": [{"text": content}]
+                })
+                
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={ADMIN_GEMINI_KEY}"
+        payload = {
+            "contents": contents
+        }
+        if system_instruction:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
+            
+        import requests as py_requests
+        res = py_requests.post(url, json=payload, timeout=30)
+        
+        if res.status_code != 200:
+            deduct_developer_balance(api_key, 0.0, model, prompt_length, res.status_code)
+            return jsonify({"error": f"Google Gemini API error: {res.text}"}), res.status_code
+            
+        gemini_data = res.json()
+        response_text = gemini_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        
+        deduct_developer_balance(api_key, cost, model, prompt_length + len(response_text), 200)
+        
+        import uuid
+        res_id = f"chatcmpl-{uuid.uuid4().hex}"
+        return jsonify({
+            "id": res_id,
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": response_text
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": int(prompt_length / 4),
+                "completion_tokens": int(len(response_text) / 4),
+                "total_tokens": int((prompt_length + len(response_text)) / 4)
+            }
+        })
+    except Exception as e:
+        deduct_developer_balance(api_key, 0.0, model, prompt_length, 500)
+        return jsonify({"error": f"API Gateway Exception: {str(e)}"}), 500
+
+# Dedicated translation API
+@app.route('/api/v1/translate', methods=['POST'])
+@require_api_key_auth
+def api_v1_translate():
+    api_key = request.api_key
+    data = request.json or {}
+    texts = data.get("texts", [])
+    mode = data.get("mode", "fast")
+    
+    if not texts:
+        return jsonify({"error": "Missing texts array"}), 400
+        
+    total_chars = sum(len(t) for t in texts)
+    cost = total_chars * 0.01 # 0.01đ per character (10.000đ/triệu ký tự)
+    
+    if request.api_balance < cost:
+        return jsonify({"error": f"Số dư không đủ cho yêu cầu này. Chi phí ước tính: {cost:.2f}đ, Số dư hiện tại: {request.api_balance:.2f}đ"}), 402
+        
+    try:
+        eng = get_engine()
+        translations = []
+        for text in texts:
+            if not text.strip():
+                translations.append(text)
+            else:
+                trans = eng.translate(text, multi_option=False, mode=mode)
+                translations.append(trans)
+                
+        deduct_developer_balance(api_key, cost, f"vietphrase-{mode}", total_chars, 200)
+        return jsonify({
+            "translations": translations,
+            "characters": total_chars,
+            "cost": cost
+        })
+    except Exception as e:
+        deduct_developer_balance(api_key, 0.0, f"vietphrase-{mode}", total_chars, 500)
+        return jsonify({"error": f"Translation Error: {str(e)}"}), 500
+
+# OpenAI-Compatible TTS API: /v1/audio/speech (Proxy to RunPod Serverless / Mock)
+@app.route('/v1/audio/speech', methods=['POST'])
+@require_api_key_auth
+def openai_audio_speech():
+    api_key = request.api_key
+    data = request.json or {}
+    input_text = data.get("input", "").strip()
+    response_format = data.get("response_format", "mp3")
+    speed = data.get("speed", 1.0)
+    
+    if not input_text:
+        return jsonify({"error": "Missing 'input' text"}), 400
+        
+    # Cost: 0.1đ per character
+    cost = len(input_text) * 0.1
+    if request.api_balance < cost:
+        return jsonify({"error": f"Số dư không đủ cho yêu cầu này. Chi phí: {cost:.2f}đ"}), 402
+        
+    runpod_api_key = os.environ.get("RUNPOD_API_TOKEN", os.environ.get("RUNPOD_API_KEY", ""))
+    runpod_endpoint_id = os.environ.get("RUNPOD_TTS_ENDPOINT_ID", "")
+    
+    if runpod_api_key and runpod_endpoint_id:
+        try:
+            url = f"https://api.runpod.ai/v1/{runpod_endpoint_id}/runsync"
+            headers = {
+                "Authorization": f"Bearer {runpod_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "input": {
+                    "text": input_text,
+                    "speed": 0.95 / speed
+                }
+            }
+            import requests as py_requests
+            r = py_requests.post(url, json=payload, headers=headers, timeout=45)
+            res = r.json()
+            
+            if r.status_code == 200 and res.get("status") == "COMPLETED":
+                audio_b64 = res.get("output", {}).get("audio_base64", "")
+                if audio_b64:
+                    import base64
+                    audio_data = base64.b64decode(audio_b64)
+                    
+                    deduct_developer_balance(api_key, cost, "runpod-matcha-tts", len(input_text), 200)
+                    
+                    from flask import send_file
+                    import io
+                    return send_file(
+                        io.BytesIO(audio_data),
+                        mimetype="audio/wav" if res.get("output", {}).get("format") == "wav" else "audio/mpeg",
+                        as_attachment=False
+                    )
+            
+            print(f"[RunPod TTS Error]: {res}")
+        except Exception as e:
+            print(f"[RunPod TTS exception]: {e}")
+            
+    return jsonify({
+        "error": "Chức năng TTS qua API yêu cầu Admin cấu hình RUNPOD_API_TOKEN và RUNPOD_TTS_ENDPOINT_ID trong file .env."
+    }), 501
+
 
 # =============================================
 # HEALTH CHECK ENDPOINT

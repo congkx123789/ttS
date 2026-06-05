@@ -310,7 +310,7 @@ export default function VipUpgradeModal({ show, onClose, onActivated }) {
             </div>
 
             <input
-              type="password"
+              type="text"
               placeholder="Nhập mã VIP (ví dụ: VIP2026)"
               value={vipCodeInput}
               onChange={(e) => setVipCodeInput(e.target.value)}

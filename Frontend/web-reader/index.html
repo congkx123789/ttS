@@ -340,7 +340,7 @@ select:focus{border-color:#6366f1}
 </div>
 
 <script>
-const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "https://api-tienhiep.lyvuha.com";
+const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "https://tienhiep.lyvuha.com";
 
 const T = {
   vi: {
@@ -1044,6 +1044,8 @@ function handleGoogleSignIn(response) {
   })
   .then(data => {
     currentUser = data.user;
+    if (data.access_token) localStorage.setItem('accessToken', data.access_token);
+    if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
     updateAuthWidget();
     closeAuthModal();
     showToast("Đăng nhập Google thành công!", false);
@@ -1083,6 +1085,8 @@ async function submitAuth() {
         errDiv.style.display = 'block';
       } else {
         currentUser = d.user;
+        if (d.access_token) localStorage.setItem('accessToken', d.access_token);
+        if (d.user) localStorage.setItem('user', JSON.stringify(d.user));
         updateAuthWidget();
         closeAuthModal();
         await loadBookshelfIds();
@@ -1172,6 +1176,9 @@ async function submitAuth() {
 async function logout() {
   try {
     await fetch(API_BASE + '/api/auth/logout', {method: 'POST'});
+  } catch(e) {}
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('user');
     currentUser = null;
     bookshelfIds.clear();
     updateAuthWidget();

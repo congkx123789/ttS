@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
 export default function DataSync({ onSyncFinished }) {
-  const [serverUrl, setServerUrl] = useState('https://api-tienhiep.lyvuha.com');
-  const [inputUrl, setInputUrl] = useState('https://api-tienhiep.lyvuha.com');
+  const [serverUrl, setServerUrl] = useState('https://tienhiep.lyvuha.com');
+  const [inputUrl, setInputUrl] = useState('https://tienhiep.lyvuha.com');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -142,7 +142,12 @@ export default function DataSync({ onSyncFinished }) {
           setUsername('');
           setPassword('');
           if (typeof chrome !== 'undefined' && chrome.storage) {
-            chrome.storage.local.set({ serverUser: data.user, serverUrl });
+            chrome.storage.local.set({ 
+              serverUser: data.user, 
+              serverUrl,
+              serverAuthToken: data.access_token,
+              serverRefreshToken: data.refresh_token
+            });
             chrome.storage.local.get(['settings'], (storageRes) => {
               const settings = storageRes.settings || {};
               let changed = false;
@@ -190,7 +195,7 @@ export default function DataSync({ onSyncFinished }) {
       setUser(null);
       setSuccessMsg("Đã đăng xuất.");
       if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.local.remove(['serverUser']);
+        chrome.storage.local.remove(['serverUser', 'serverAuthToken', 'serverRefreshToken']);
         chrome.storage.local.get(['settings'], (storageRes) => {
           const settings = storageRes.settings || {};
           if (settings.vipKey === 'VIP_SERVER') {
@@ -231,7 +236,7 @@ export default function DataSync({ onSyncFinished }) {
                 type="text" 
                 value={inputUrl} 
                 onChange={(e) => setInputUrl(e.target.value)}
-                placeholder="Ví dụ: https://api-tienhiep.lyvuha.com"
+                placeholder="Ví dụ: https://tienhiep.lyvuha.com"
               />
               <button 
                 onClick={handleSaveAndCheck}
@@ -359,8 +364,12 @@ export default function DataSync({ onSyncFinished }) {
                 if (typeof chrome !== 'undefined' && chrome.identity) {
                   chrome.identity.getAuthToken({ interactive: true }, async function(token) {
                     if (chrome.runtime.lastError) {
-                      setErrorMsg("Lỗi khi kết nối với tài khoản Google. (Vui lòng đảm bảo trình duyệt Chrome của bạn đã đăng nhập).");
+                      setErrorMsg("Lỗi Google Auth (Chưa cấu hình 'key' trong manifest). Hãy đăng nhập trực tiếp trên trang Web: " + serverUrl);
                       setIsSubmitting(false);
+                      // Fallback: Open server URL in a new tab where Web login works
+                      setTimeout(() => {
+                        window.open(serverUrl, '_blank');
+                      }, 2000);
                       return;
                     }
                     
@@ -377,7 +386,12 @@ export default function DataSync({ onSyncFinished }) {
                         setSuccessMsg("Đăng nhập Google thành công!");
                         setUser(data.user);
                         
-                        chrome.storage.local.set({ serverUser: data.user, serverUrl });
+                        chrome.storage.local.set({ 
+                          serverUser: data.user, 
+                          serverUrl,
+                          serverAuthToken: data.access_token,
+                          serverRefreshToken: data.refresh_token
+                        });
                         chrome.storage.local.get(['settings'], (storageRes) => {
                           const settings = storageRes.settings || {};
                           let changed = false;

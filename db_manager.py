@@ -38,6 +38,8 @@ if not logger.handlers:
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+from dotenv import load_dotenv
+load_dotenv(override=True)
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 USER_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users_data.db")
 
@@ -387,6 +389,33 @@ def init_user_db():
         )
         """)
 
+        # Add API Keys & Usage tables
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            api_key TEXT UNIQUE NOT NULL,
+            name TEXT DEFAULT 'Default Key',
+            status TEXT DEFAULT 'active',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """)
+
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            api_key TEXT NOT NULL,
+            model TEXT NOT NULL,
+            tokens INTEGER DEFAULT 0,
+            cost REAL DEFAULT 0.0,
+            status_code INTEGER,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (api_key) REFERENCES api_keys(api_key)
+        )
+        """)
+
         # Safe column migrations
         for table in ["bookshelf", "reading_history"]:
             try:
@@ -400,6 +429,7 @@ def init_user_db():
             ("google_id", "TEXT"),
             ("vip_plan", "TEXT"),
             ("vip_expiry", "DATETIME"),
+            ("api_balance", "REAL DEFAULT 0.0"),
         ]
         for col_name, col_type in new_user_cols:
             try:
@@ -408,7 +438,7 @@ def init_user_db():
                 pass
 
         conn.commit()
-        logger.info("✔ Database initialized successfully.")
+        logger.info("✔ Database initialized successfully (with API Store tables).")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise

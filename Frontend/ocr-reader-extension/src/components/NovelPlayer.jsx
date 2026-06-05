@@ -1,199 +1,404 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export default function NovelPlayer({ onBack, onReadText, onOpenIndex }) {
+export default function NovelPlayer({ 
+  chapterData, 
+  onBack, 
+  onReadText, 
+  onOpenIndex,
+  isPlaying,
+  setIsPlaying,
+  currentParagraphIndex,
+  setCurrentParagraphIndex,
+  playbackSpeed,
+  setPlaybackSpeed,
+  playbackEngine,
+  setPlaybackEngine,
+  selectedVoice,
+  setSelectedVoice
+}) {
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+  const [voices, setVoices] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sleepTimerSeconds, setSleepTimerSeconds] = useState(0); // 0 = off
+  const [sleepTimeLeft, setSleepTimeLeft] = useState(0);
+
+  // Load and filter voices (Vi, Zh, En)
+  useEffect(() => {
+    const updateVoices = () => {
+      const allVoices = window.speechSynthesis.getVoices();
+      const filtered = allVoices.filter(v => v.lang.includes('vi') || v.lang.includes('zh') || v.lang.includes('en'));
+      setVoices(filtered);
+      
+      // Auto select Vietnamese voice if none selected
+      if (!selectedVoice && filtered.length > 0) {
+        const viVoice = filtered.find(v => v.lang.includes('vi') || v.name.toLowerCase().includes('viet'));
+        if (viVoice) {
+          setSelectedVoice(viVoice.name);
+        } else {
+          setSelectedVoice(filtered[0].name);
+        }
+      }
+    };
+    updateVoices();
+    window.speechSynthesis.onvoiceschanged = updateVoices;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, [selectedVoice, setSelectedVoice]);
+
+  // Sleep Timer logic
+  useEffect(() => {
+    if (sleepTimerSeconds <= 0) {
+      setSleepTimeLeft(0);
+      return;
+    }
+    setSleepTimeLeft(sleepTimerSeconds);
+
+    const timer = setInterval(() => {
+      setSleepTimeLeft(prev => {
+        if (prev <= 1) {
+          setIsPlaying(false);
+          setSleepTimerSeconds(0);
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [sleepTimerSeconds, setIsPlaying]);
+
+  const formatTime = (secs) => {
+    if (secs <= 0) return "";
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const paragraphs = chapterData?.paragraphs || [];
+  const novelTitle = chapterData?.novelTitle || "Truyện Ngoài";
+  const chapterTitle = chapterData?.chapterTitle || "Chương đọc";
+  const author = chapterData?.author || "Tác giả ẩn";
+  const cover = chapterData?.cover || "";
+  const currentParagraphText = paragraphs[currentParagraphIndex] || "Hết chương truyện.";
+
+  const hasCover = cover && (cover.startsWith('http') || cover.startsWith('data:image'));
+
+  const progressPercent = paragraphs.length 
+    ? (currentParagraphIndex / paragraphs.length) * 100 
+    : 0;
+
+  const handleProgressBarClick = (e) => {
+    if (!paragraphs.length) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+    const percentage = Math.max(0, Math.min(1, clickX / width));
+    const targetIdx = Math.floor(percentage * paragraphs.length);
+    setCurrentParagraphIndex(Math.min(paragraphs.length - 1, targetIdx));
+  };
 
   return (
     <div className="absolute inset-0 z-50 bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center h-[48px] px-4 w-full shrink-0 z-10 bg-transparent">
-        <button onClick={onBack} className="material-symbols-outlined text-white hover:bg-gray-800 p-1 rounded-full transition-colors" style={{ fontVariationSettings: "'FILL' 0" }}>
+      <div className="flex justify-between items-center h-[48px] px-4 w-full shrink-0 z-10 bg-gray-950/40 backdrop-blur-md border-b border-white/5">
+        <button onClick={onBack} className="material-symbols-outlined text-white hover:bg-gray-800 p-1 rounded-full transition-colors">
           keyboard_arrow_down
         </button>
-        <h1 className="text-headline-xs font-headline-xs text-white">Trợ lý Văn học & Nghe AI</h1>
-        <div className="flex gap-4">
-          <span className="material-symbols-outlined text-white cursor-pointer hover:text-gray-300">refresh</span>
-          <span className="material-symbols-outlined text-white cursor-pointer hover:text-gray-300">more_horiz</span>
-        </div>
+        <h1 className="text-sm font-semibold tracking-wider uppercase text-gray-300">Nghe Đọc AI</h1>
+        <button onClick={() => setShowSettings(!showSettings)} className="material-symbols-outlined text-white hover:bg-gray-800 p-1 rounded-full transition-colors">
+          settings
+        </button>
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 px-4 flex flex-col gap-5 relative">
-        {/* Background Image Blur Effect */}
-        <div className="absolute top-0 left-0 w-full h-[400px] -z-10 opacity-30">
-          <img 
-            alt="Background" 
-            className="w-full h-full object-cover blur-2xl mask-image-linear-gradient" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1yai1yUA3rO4hord9nk_KMR3SVr8g8X9AlhvjuHNYMv5u7WG_eq-BwaPLeeJLiqL3aO3NSN_D9waJi-E_X6mCTRWFVOGq59hH0MBR73hDqD6lndU5o3bySJn9tFdvzTpTltfcNgK4TiGEzxOhPV4STthIeyoKiN1q0FcTcceBRC4KCsCvzIs1wRULYFClC_DxWKNkLoVFzfbC_IB56R2oMJWQeuL2mGEq9mxIjLzTdH4WOP61CtEhzRXDzlZ5jfTXyTB7WBufwDY"
-          />
+      <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 px-4 flex flex-col gap-4 relative">
+        {/* Blurred Background cover */}
+        <div className="absolute top-0 left-0 w-full h-[360px] -z-10 opacity-20 pointer-events-none">
+          {hasCover ? (
+            <img 
+              alt="Background Blur" 
+              className="w-full h-full object-cover blur-3xl scale-125" 
+              src={cover}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-b from-primary/30 to-transparent blur-3xl"></div>
+          )}
         </div>
 
-        {/* Album Art */}
-        <div className="w-full aspect-square max-h-[300px] mt-4 rounded-xl overflow-hidden relative shadow-lg mx-auto flex-shrink-0">
-          <img 
-            alt="Book Cover" 
-            className="w-full h-full object-cover" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuB95siKszqrhov-X98bWFdjZX7XQxhfFX0pUOXkF6kzlsMGSX8kvDUqJbuhJSjkzXdBMMfwcV1T7gYXiPrPYkN1mWejvFoE_azvp6hRXNS4aM2d6-5a21DLx4vA-CQalnIHKKIkj5UIPOHRe0eFdyrWqGOlN9_yjC1gCv4oTVpH4EISm1cVHy3AnduZR2ou0YWYXtgavtJ-imRF2Q--D0DGhe6XHzqn8xQFvOQEjwT2W-HWvgSDO-l7q9obW6k-ctYhhhKUT2tWhdg"
-          />
-          <div className="absolute top-2 right-2 bg-[#d4af37] text-black text-[10px] font-bold px-2 py-0.5 rounded-sm">会员</div>
-          <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-4 flex flex-col items-center">
-            <h2 className="text-headline-sm font-headline-sm text-white">万道剑尊</h2>
-            <p className="text-body-sm font-body-sm text-gray-300">第1章 授剑</p>
+        {/* Album Art with gradients */}
+        <div className="w-full max-w-[180px] aspect-[3/4] mt-6 rounded-2xl overflow-hidden relative shadow-[0_8px_30px_rgb(0,0,0,0.6)] mx-auto flex-shrink-0 border border-white/10 group">
+          {hasCover ? (
+            <img 
+              alt="Book Cover" 
+              className="w-full h-full object-cover" 
+              src={cover}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary via-indigo-900 to-black flex flex-col justify-between p-4 text-center">
+              <span className="text-[10px] text-primary-container font-mono tracking-widest uppercase opacity-75">Antigravity Reader</span>
+              <div className="flex flex-col items-center">
+                <span className="material-symbols-outlined text-4xl text-primary mb-2" style={{ fontVariationSettings: "'FILL' 1" }}>auto_stories</span>
+                <span className="text-sm font-bold text-white line-clamp-2 px-1">{novelTitle}</span>
+              </div>
+              <span className="text-[9px] text-gray-400 font-medium truncate">{author}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 text-center pointer-events-none">
+            <span className="text-[8px] uppercase font-bold text-primary-container bg-primary/20 px-2 py-0.5 rounded-full self-center mb-1">
+              {playbackEngine === 'cloud' ? 'AI Cloud' : 'Local TTS'}
+            </span>
           </div>
         </div>
 
-        {/* Playback Controls */}
+        {/* Metadata info */}
+        <div className="text-center space-y-1">
+          <h2 className="text-lg font-bold text-white line-clamp-1">{novelTitle}</h2>
+          <p className="text-sm text-primary-container font-medium line-clamp-1">{chapterTitle}</p>
+          <p className="text-xs text-gray-400">Tác giả: {author}</p>
+        </div>
+
+        {/* Caption Display Box (Active Paragraph) */}
+        <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl p-4 min-h-[110px] max-h-[140px] overflow-y-auto flex flex-col justify-center items-center relative text-center custom-scrollbar">
+          {isPlaying && (
+            <div className="flex items-center gap-1 absolute top-2 right-3">
+              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-ping"></span>
+              <span className="text-[9px] text-primary uppercase font-bold tracking-wider">Đang đọc</span>
+            </div>
+          )}
+          <p className="text-sm font-medium text-gray-100 leading-relaxed italic px-2">
+            "{currentParagraphText}"
+          </p>
+        </div>
+
+        {/* Playback Controls & Progress Bar */}
         <div className="flex flex-col gap-4 mt-2">
-          {/* Progress Bar */}
-          <div className="flex items-center gap-4 px-2">
-            <div className="text-xs text-gray-400">03:19</div>
-            <div className="flex-1 h-1 bg-gray-700 rounded-full relative cursor-pointer">
-              <div className="absolute top-0 left-0 h-full w-1/2 bg-primary-container rounded-full"></div>
-              <div className="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full shadow-md"></div>
-            </div>
-            <div className="text-xs text-gray-400">06:28</div>
-          </div>
-          
-          {/* Main Controls */}
-          <div className="flex justify-between items-center px-6">
-            <span className="material-symbols-outlined text-gray-400 text-2xl cursor-pointer hover:text-white transition-colors">replay_5</span>
-            <span className="material-symbols-outlined text-gray-400 text-3xl cursor-pointer hover:text-white transition-colors">skip_previous</span>
-            <button className="w-16 h-16 bg-primary-container rounded-full flex items-center justify-center shadow-lg hover:bg-primary transition-colors active:scale-95">
-              <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>pause</span>
-            </button>
-            <span className="material-symbols-outlined text-gray-400 text-3xl cursor-pointer hover:text-white transition-colors">skip_next</span>
-            <span className="material-symbols-outlined text-gray-400 text-2xl cursor-pointer hover:text-white transition-colors">forward_5</span>
-          </div>
-
-          {/* Sub Toolbar */}
-          <div className="flex justify-between mt-4 px-2">
-            <div className="flex flex-col items-center gap-1 cursor-pointer hover:text-white group">
-              <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">book</span>
-              <span className="text-[10px] text-gray-400 group-hover:text-white transition-colors">Kệ sách</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 cursor-pointer hover:text-white group">
-              <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">alarm</span>
-              <span className="text-[10px] text-gray-400 group-hover:text-white transition-colors">Hẹn giờ tắt</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 cursor-pointer hover:text-white group">
-              <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">speed</span>
-              <span className="text-[10px] text-gray-400 group-hover:text-white transition-colors">Tốc độ phát</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 cursor-pointer hover:text-white group">
-              <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">download</span>
-              <span className="text-[10px] text-gray-400 group-hover:text-white transition-colors">Tải xuống</span>
+          {/* Progress Slider */}
+          <div className="flex items-center gap-3 px-2">
+            <div className="text-[10px] text-gray-400 font-mono w-8 text-right">
+              {currentParagraphIndex}
             </div>
             <div 
-              onClick={onOpenIndex}
-              className="flex flex-col items-center gap-1 cursor-pointer hover:text-white group"
+              onClick={handleProgressBarClick}
+              className="flex-1 h-1.5 bg-gray-800 rounded-full relative cursor-pointer hover:h-2 transition-all"
             >
-              <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">format_list_bulleted</span>
-              <span className="text-[10px] text-gray-400 group-hover:text-white transition-colors">6505 chương</span>
+              <div 
+                className="absolute top-0 left-0 h-full bg-primary rounded-full" 
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+              <div 
+                className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg border border-primary transition-transform scale-75 hover:scale-100"
+                style={{ left: `calc(${progressPercent}% - 7px)` }}
+              ></div>
+            </div>
+            <div className="text-[10px] text-gray-400 font-mono w-8">
+              {paragraphs.length}
+            </div>
+          </div>
+          
+          {/* Main Controls Panel */}
+          <div className="flex justify-between items-center px-4">
+            <button 
+              onClick={() => setCurrentParagraphIndex(prev => Math.max(0, prev - 5))}
+              className="material-symbols-outlined text-gray-400 text-2xl hover:text-white transition-colors cursor-pointer"
+              title="Lùi 5 đoạn"
+            >
+              replay_5
+            </button>
+            <button 
+              onClick={() => setCurrentParagraphIndex(prev => Math.max(0, prev - 1))}
+              className="material-symbols-outlined text-gray-400 text-3xl hover:text-white transition-colors cursor-pointer"
+              title="Đoạn trước"
+            >
+              skip_previous
+            </button>
+            
+            <button 
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="w-14 h-14 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform"
+            >
+              <span className="material-symbols-outlined text-3xl">
+                {isPlaying ? 'pause' : 'play_arrow'}
+              </span>
+            </button>
+
+            <button 
+              onClick={() => {
+                if (currentParagraphIndex + 1 < paragraphs.length) {
+                  setCurrentParagraphIndex(prev => prev + 1);
+                } else {
+                  alert("Đã đến cuối chương truyện!");
+                }
+              }}
+              className="material-symbols-outlined text-gray-400 text-3xl hover:text-white transition-colors cursor-pointer"
+              title="Đoạn sau"
+            >
+              skip_next
+            </button>
+            <button 
+              onClick={() => setCurrentParagraphIndex(prev => Math.min(paragraphs.length - 1, prev + 5))}
+              className="material-symbols-outlined text-gray-400 text-2xl hover:text-white transition-colors cursor-pointer"
+              title="Tiến 5 đoạn"
+            >
+              forward_5
+            </button>
+          </div>
+
+          {/* Quick Toolbar */}
+          <div className="grid grid-cols-3 gap-2 bg-white/5 border border-white/5 p-2 rounded-xl text-center mt-2">
+            <div className="flex flex-col items-center justify-center p-1 border-r border-white/5">
+              <span className="text-[10px] text-gray-400 uppercase font-bold mb-1">Tốc độ</span>
+              <select 
+                value={playbackSpeed} 
+                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                className="bg-transparent text-sm font-semibold text-primary focus:outline-none cursor-pointer"
+              >
+                <option value="0.8" className="bg-gray-900">0.8x</option>
+                <option value="1.0" className="bg-gray-900">1.0x</option>
+                <option value="1.2" className="bg-gray-900">1.2x</option>
+                <option value="1.5" className="bg-gray-900">1.5x</option>
+                <option value="2.0" className="bg-gray-900">2.0x</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-1 border-r border-white/5">
+              <span className="text-[10px] text-gray-400 uppercase font-bold mb-1">Nguồn phát</span>
+              <select 
+                value={playbackEngine} 
+                onChange={(e) => setPlaybackEngine(e.target.value)}
+                className="bg-transparent text-sm font-semibold text-primary focus:outline-none cursor-pointer"
+              >
+                <option value="local" className="bg-gray-900">Local (M.Phí)</option>
+                <option value="cloud" className="bg-gray-900">Cloud AI</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-1">
+              <span className="text-[10px] text-gray-400 uppercase font-bold mb-1">Hẹn giờ</span>
+              <select 
+                value={sleepTimerSeconds} 
+                onChange={(e) => setSleepTimerSeconds(parseInt(e.target.value))}
+                className="bg-transparent text-sm font-semibold text-primary focus:outline-none cursor-pointer"
+              >
+                <option value="0" className="bg-gray-900">Tắt</option>
+                <option value="900" className="bg-gray-900">15 phút</option>
+                <option value="1800" className="bg-gray-900">30 phút</option>
+                <option value="2700" className="bg-gray-900">45 phút</option>
+                <option value="3600" className="bg-gray-900">60 phút</option>
+              </select>
+              {sleepTimeLeft > 0 && (
+                <span className="text-[9px] text-red-400 font-mono mt-0.5">{formatTime(sleepTimeLeft)}</span>
+              )}
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 mt-2 justify-center">
-            <button className="bg-gray-800 text-gray-300 px-6 py-2 rounded-full text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors">朗读人 · 昭君 &gt;</button>
+          <div className="flex gap-3 justify-center mt-2">
             <button 
               onClick={onReadText}
-              className="bg-gray-800 text-gray-300 px-6 py-2 rounded-full text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors"
+              className="flex-1 max-w-[150px] bg-white/10 text-gray-200 border border-white/10 px-4 py-2 rounded-full text-xs font-semibold hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
             >
-              Xem nguyên văn
+              <span className="material-symbols-outlined text-[16px]">menu_book</span>
+              Đọc nguyên văn
             </button>
-          </div>
-        </div>
-
-        {/* AI Interaction Card */}
-        <div 
-          onClick={() => setIsAIChatOpen(true)}
-          className="bg-gray-800/50 border border-primary-container/30 rounded-xl p-4 flex gap-4 items-center cursor-pointer hover:bg-gray-800 transition-colors"
-        >
-          <div className="w-12 h-12 bg-primary-container/20 rounded-full flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-primary-container text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-          </div>
-          <div className="flex flex-col">
-            <h3 className="text-headline-xs font-headline-xs text-white mb-1">Tương tác AI</h3>
-            <p className="text-xs text-gray-400 line-clamp-2">Bắt đầu hội thoại để phân tích chương, giải thích cốt truyện, hoặc tra cứu nhân vật...</p>
-          </div>
-        </div>
-
-        {/* Book Intro */}
-        <div className="bg-gray-800/30 rounded-xl p-4">
-          <h3 className="text-sm font-bold text-white mb-2">书籍简介</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">少年遭挚爱背叛，沦为万人唾弃的叛徒，一怒开启金手指，三天升了十八级，决战之日，挚爱懵了！</p>
-        </div>
-
-        {/* Recommendations */}
-        <div className="bg-gray-800/30 rounded-xl p-4 pb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-bold text-white">猜你喜欢听</h3>
-            <div className="flex items-center text-xs text-gray-400 gap-1 cursor-pointer hover:text-white transition-colors">
-              换一换 <span className="material-symbols-outlined text-[14px]">refresh</span>
-            </div>
-          </div>
-          
-          <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
-            {[
-              "https://lh3.googleusercontent.com/aida-public/AB6AXuCX4w1nvTclviifGgFlNhW2iOz1zlF6jNxx4wUsUDk1I7uhZeeFYYYhTial8SyhB1Wd8bpZ8ZK3PXWsHnBU4-2H2xO9hrQ749hmkOnSRJMoBM2Pu5zvOcWyEfxlMuIeCWyyiovohbMuf05r3IQfW8z5uSHHysCeZYIsPUaoRq3AQT-hOBt-goG3DLqZprMrBpG1MRfo-xRSH2MRNcC0WQxEviuFaIXaojshT99YEvjDYfKLr0NX4ie1kUbbUnZqbijCiox1KkDUq3U",
-              "https://lh3.googleusercontent.com/aida-public/AB6AXuCR9-8LXBMCROv-KZpUOhksSg88fNZvfKOAXqQmuysqgo56q6-50TtW_SZGexxL4Re7wXi9FwWqLV2r3rLEgElhlP2x8MwPktfV166QBD2NaOQfqiGX7jZXZBjQ0P2sQjkmOPGOeO1hm-hq_ypCxJ5ZdQ0lngw_MiSHQr6ywDgBNvHc33mr-CRPUFR3TU8NktYRmOSgg2Jsfn5yx-AMk4opNTbIMkehysIiKnJ_XshdvYALS7VPJ-LJncK4qZpTHUo18BZfW4u-Vzk",
-              "https://lh3.googleusercontent.com/aida-public/AB6AXuD_vHxSZhAgOmDYDaxs7d1SoOkeO1dANEBLr6uScEN6Of_ZgnP_fvr3ftYCJWjfGIjcoPQ46fe2nnLmfTVoioE_RqCPVNTVNRv91XpUZqTr-REQnMyAWgKd4NFTZt6sWtfqbOEgYozOUCbw0PqUlS3ZljqTw3ws-DSoJ1G7nUEpT5o0g4qdfWG41Km4kqOWBwVUnr1nN0waVB-6g2k5upwRWjlUJGVXykop5tOdFiux5iFWGkjc6p337_2yClpNIFqoJTcHeCoxtBw"
-            ].map((img, i) => (
-              <div key={i} className="w-24 shrink-0 relative cursor-pointer hover:opacity-80 transition-opacity">
-                <div className="absolute top-1 right-1 bg-[#d4af37] text-black text-[9px] font-bold px-1.5 py-0.5 rounded-sm z-10">会员</div>
-                <img alt={`Rec ${i+1}`} className="w-full aspect-[3/4] object-cover rounded-md mb-2" src={img} />
-              </div>
-            ))}
+            <button 
+              onClick={() => setIsAIChatOpen(true)}
+              className="flex-1 max-w-[150px] bg-primary/20 text-primary border border-primary/20 px-4 py-2 rounded-full text-xs font-semibold hover:bg-primary/30 transition-colors flex items-center justify-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+              Hỏi AI chương này
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Bottom Sheet Simulation (AI Chat) - Toggleable */}
-      <div 
-        className={`absolute bottom-0 left-0 w-full h-[70%] bg-gray-900 rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t border-gray-800 flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${isAIChatOpen ? 'translate-y-0' : 'translate-y-full'}`}
-      >
-        {/* Sheet Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gray-800 rounded-full overflow-hidden">
-              <img alt="AI Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvy5Osg2Z_qY30TVEH49G1dlXevLBI-wV72r8HjSZOd4Ln4t1TdmCjYklDocom85lqlSHAbJaVi7_YeGWir8Zv-jpbyJBSBEk9fA40u5ihEMy6dHiie95AvjH0ES_fwA-mfA48vU3Q_WOVHXuPLsOk5SsE4fmZRtaRb8VssNVKKv38-xb7EkZ1kGRsp907mtoblWHGGM0cZHYi2e95QQBvr-AYTeBwG8CDw7zL9BOQapcSYoxTUj2ZJ71wTNyEljyMdX3XgSFnQtQ" />
+      {/* Slide-Up Overlay for Detailed Voice Settings */}
+      {showSettings && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-end animate-in fade-in duration-200">
+          <div className="w-full bg-gray-950 border-t border-white/10 rounded-t-3xl p-6 space-y-4 max-h-[70%] overflow-y-auto">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-lg">Cài đặt giọng đọc</h3>
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="material-symbols-outlined text-gray-400 hover:text-white"
+              >
+                close
+              </button>
             </div>
-            <span className="text-sm font-semibold text-white">Zhaojun: Trợ lý Văn học</span>
+
+            {playbackEngine === 'local' ? (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400 font-bold block">Chọn Giọng đọc hệ thống</label>
+                <div className="max-h-[180px] overflow-y-auto border border-white/10 rounded-xl divide-y divide-white/5 bg-white/5 custom-scrollbar">
+                  {voices.map((v) => (
+                    <div 
+                      key={v.name}
+                      onClick={() => {
+                        setSelectedVoice(v.name);
+                        setShowSettings(false);
+                      }}
+                      className={`p-3 text-xs flex justify-between items-center cursor-pointer hover:bg-white/5 ${selectedVoice === v.name ? 'text-primary font-bold bg-primary/5' : 'text-gray-300'}`}
+                    >
+                      <span className="truncate max-w-[80%]">{v.name} ({v.lang})</span>
+                      {selectedVoice === v.name && (
+                        <span className="material-symbols-outlined text-primary text-[16px]">check</span>
+                      )}
+                    </div>
+                  ))}
+                  {voices.length === 0 && (
+                    <p className="p-4 text-center text-xs text-gray-500">Đang tải danh sách giọng đọc của trình duyệt...</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-300 leading-relaxed bg-primary/5 p-3 rounded-lg border border-primary/20">
+                  ⚠️ Giọng đọc AI Cloud sử dụng mô hình cao cấp của máy chủ. Cần thiết lập RUNPOD_API_TOKEN để chạy online ổn định 100%. Nếu xảy ra lỗi hoặc thiếu số dư, trình phát sẽ tự động chuyển về giọng đọc Local.
+                </p>
+              </div>
+            )}
           </div>
-          <button onClick={() => setIsAIChatOpen(false)} className="material-symbols-outlined text-gray-400 hover:text-white transition-colors cursor-pointer p-1 rounded-full hover:bg-gray-800">
+        </div>
+      )}
+
+      {/* AI Assistant Sheet Overlay */}
+      <div 
+        className={`absolute bottom-0 left-0 w-full h-[75%] bg-gray-950 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)] border-t border-white/10 flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${isAIChatOpen ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gray-900/50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center shadow-inner">
+              <span className="material-symbols-outlined text-primary text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
+            </div>
+            <div>
+              <span className="text-sm font-bold text-white block">Zhaojun AI Trợ Lý</span>
+              <span className="text-[10px] text-gray-400">Phân tích sâu chương truyện</span>
+            </div>
+          </div>
+          <button onClick={() => setIsAIChatOpen(false)} className="material-symbols-outlined text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-800">
             close
           </button>
         </div>
 
-        {/* Chat Canvas */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-4">
-          {/* AI Message */}
+        {/* Simulated Chat Content with accurate context */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 flex flex-col gap-4">
           <div className="flex gap-3 max-w-[85%]">
-            <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 mt-1">
-              <img alt="AI Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCr8VNz-MqI-l2jRS4k5eV16T7VBEQoufjwp0pdCUi3REbdv1L9ubPITtH8KbmXPYFQDwsIoWW5O0sCHPB0-NQlBDKe_XRfIL8-wIgIGtN88J0qOMFk_KqFTGNFRbBy-8hiD6NNNHqBGGnhvVHXnfyty2roX1O-tAD_ctIf_XjBu6G16jVQpVmnRNMF0XDbCctC4adrp--Ky3mXC1jZBTGBg4CEtdtE8vxJC-vcbKieHu5udppqz8L40Hm2LqlkCs38AjqYUQJrbuI" />
+            <div className="bg-white/5 border border-white/5 text-xs text-gray-200 p-3 rounded-2xl rounded-tl-sm shadow-sm leading-relaxed">
+              Xin chào! Tôi có thể trả lời mọi câu hỏi về chương <strong>{chapterTitle}</strong> của cuốn truyện này. Bạn có muốn phân tích âm mưu ẩn giấu, tóm tắt diễn biến chính hay giải thích các điển tích tu luyện trong chương này không?
             </div>
-            <div className="bg-gray-800 text-sm text-gray-200 p-3 rounded-2xl rounded-tl-sm shadow-sm">
-              Chào bạn. Tôi là Trợ lý Văn học AI. Tôi có thể giúp bạn phân tích chương này, giải thích các thuật ngữ, hoặc tóm tắt cốt truyện. Bạn muốn biết gì?
-            </div>
-          </div>
-
-          {/* Chips */}
-          <div className="flex flex-wrap gap-2 pl-9">
-            <span className="text-xs bg-primary-container/20 text-primary-fixed border border-primary-container/30 px-3 py-1.5 rounded-full cursor-pointer hover:bg-primary-container/30 transition-colors">Phân tích âm mưu...</span>
-            <span className="text-xs bg-primary-container/20 text-primary-fixed border border-primary-container/30 px-3 py-1.5 rounded-full cursor-pointer hover:bg-primary-container/30 transition-colors">Giải thích golden finger...</span>
           </div>
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t border-gray-800 bg-gray-900 shrink-0">
-          <div className="flex items-center gap-2 bg-gray-800 rounded-full px-4 py-2 border border-gray-700 focus-within:border-primary-container transition-colors">
-            <span className="material-symbols-outlined text-gray-400 cursor-pointer hover:text-white transition-colors">mic</span>
+        <div className="p-4 border-t border-white/5 bg-gray-950 shrink-0">
+          <div className="flex items-center gap-2 bg-white/5 rounded-full px-4 py-2 border border-white/10 focus-within:border-primary transition-colors">
             <input 
-              className="flex-1 bg-transparent border-none text-sm text-white focus:ring-0 focus:outline-none placeholder-gray-500" 
-              placeholder="Hỏi AI về cuốn sách..." 
+              className="flex-1 bg-transparent border-none text-xs text-white focus:ring-0 focus:outline-none placeholder-gray-500" 
+              placeholder="Hỏi AI về nội dung chương..." 
               type="text" 
             />
-            <span className="material-symbols-outlined text-primary-container cursor-pointer hover:text-primary-fixed transition-colors" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
+            <span className="material-symbols-outlined text-primary cursor-pointer hover:text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
           </div>
         </div>
       </div>

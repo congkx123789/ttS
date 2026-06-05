@@ -500,11 +500,8 @@ async function getBackendHost(settings) {
     if (settings.apiHost) {
         hosts.push(settings.apiHost.replace(/\/$/, ''));
     }
-    hosts.push("https://api.tienhiep.lyvuha.com");
-    hosts.push("http://localhost:5050");
     hosts.push("https://tienhiep.lyvuha.com");
-    hosts.push("https://api-tienhiep.lyvuha.com");
-    hosts.push("http://localhost:5000");
+    hosts.push("http://localhost:5051");
     
     for (const host of hosts) {
         try {
@@ -638,7 +635,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 });
             }
         });
-        return true; // Keep channel open
+    } else if (request.action === "SYNC_WEB_AUTH") {
+        const { token, user } = request.payload;
+        if (token && user) {
+            chrome.storage.local.get(['serverUrl', 'settings'], (res) => {
+                const sUrl = res.serverUrl || "http://localhost:5051";
+                chrome.storage.local.set({
+                    serverAuthToken: token,
+                    serverUser: user,
+                    serverUrl: sUrl
+                });
+                
+                // Update VIP settings if necessary
+                const settings = res.settings || {};
+                let changed = false;
+                if (user.vip_status === 1) {
+                    if (settings.membershipType !== 'vip') {
+                        settings.membershipType = 'vip';
+                        settings.vipKey = settings.vipKey || 'VIP_SERVER';
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    chrome.storage.local.set({ settings });
+                }
+            });
+            sendResponse({ success: true });
+        } else {
+            sendResponse({ success: false });
+        }
+        return true;
     }
 });
 

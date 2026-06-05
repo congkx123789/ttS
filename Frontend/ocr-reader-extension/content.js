@@ -288,6 +288,27 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                 : { success: true, count }
             );
         });
+    } else if (req.action === 'GET_CLEAN_TEXT') {
+        try {
+            const cleanData = extractCleanChapterText();
+            sendResponse({ success: true, data: cleanData });
+        } catch (e) {
+            sendResponse({ success: false, error: e.message });
+        }
+    } else if (req.action === 'TRIGGER_AUTO_NEXT') {
+        try {
+            checkAndTriggerAutoNext(true);
+            sendResponse({ success: true });
+        } catch (e) {
+            sendResponse({ success: false, error: e.message });
+        }
+    } else if (req.action === 'TRIGGER_PREV') {
+        try {
+            checkAndTriggerPrev(true);
+            sendResponse({ success: true });
+        } catch (e) {
+            sendResponse({ success: false, error: e.message });
+        }
     } else if (req.action === 'SHOW_LIMIT_ALERT') {
         const alertId = 'ocr-limit-alert-toast';
         if (document.getElementById(alertId)) return;
@@ -479,6 +500,40 @@ function checkAndTriggerAutoNext(force = false) {
     });
 }
 
+function checkAndTriggerPrev(force = false) {
+    if (typeof chrome === 'undefined' || !chrome.storage) return;
+
+    chrome.storage.local.get(['prevChapterSelector'], (res) => {
+        const selector = res.prevChapterSelector || '.prev-btn, #prev-chap, a:contains("上一章"), a[rel="prev"], a:contains("上一页"), a:contains("上一頁")';
+        let prevBtn = null;
+        const selectors = selector.split(',').map(s => s.trim());
+        for (const sel of selectors) {
+            try {
+                if (sel.includes(':contains')) {
+                    const matchText = sel.match(/"([^"]+)"/)?.[1] || sel.match(/'([^']+)'/)?.[1];
+                    if (matchText) {
+                        const anchors = Array.from(document.querySelectorAll('a'));
+                        prevBtn = anchors.find(a => a.textContent.includes(matchText));
+                    }
+                } else {
+                    prevBtn = document.querySelector(sel);
+                }
+            } catch (e) {}
+            if (prevBtn) break;
+        }
+
+        if (prevBtn) {
+            try {
+                prevBtn.click();
+            } catch (err) {
+                console.error("[AutoPrev] Click failed:", err);
+            }
+        } else {
+            console.log("[AutoPrev] Could not find previous chapter button with selector:", selector);
+        }
+    });
+}
+
 function init() {
     domObs.observe(document.body, { 
         childList: true, 
@@ -510,3 +565,196 @@ function init() {
     }, 1500);
 }
 document.body ? init() : window.addEventListener('DOMContentLoaded', init);
+
+function extractCleanChapterText() {
+    // 1. Selector Mapping
+    const SELECTORS = {
+        "qidian.com": ".read-content, #read-content",
+        "fanqie.com": ".muye-reader-content-novel",
+        "truyenfull.vn": "#chapter-c, .chapter-c",
+        "tangthuvien.vn": ".box-chap, #chapter-content",
+        "metruyenchu.com.vn": "#chapter-detail",
+        "hjwzw.com": "#content, .content",
+        "tw.hjwzw.com": "#content, .content",
+        "uukanshu.com": "#contentbox",
+        "69shuba.com": ".txtnav",
+        "biquge": ".showtxt, #content"
+    };
+
+    const host = window.location.hostname;
+    let mainEl = null;
+
+    // Check selectors mapping
+    for (const [domain, selector] of Object.entries(SELECTORS)) {
+        if (host.includes(domain)) {
+            const els = selector.split(',').map(s => s.trim());
+            for (const sel of els) {
+                mainEl = document.querySelector(sel);
+                if (mainEl) break;
+            }
+        }
+        if (mainEl) break;
+    }
+
+    // Fallback: Link/Text Density Heuristic
+    if (!mainEl) {
+        let bestEl = null;
+        let bestScore = -1;
+        
+        const candidates = document.querySelectorAll('div, article, section');
+        candidates.forEach(el => {
+            const text = el.innerText || '';
+            const textLength = text.trim().length;
+            if (textLength < 400) return;
+
+            let linkTextLength = 0;
+            const links = el.querySelectorAll('a');
+            links.forEach(a => {
+                linkTextLength += (a.innerText || '').length;
+            });
+
+            const linkDensity = linkTextLength / (textLength || 1);
+            if (linkDensity > 0.12) return;
+
+            const pCount = el.querySelectorAll('p').length;
+            const brCount = el.querySelectorAll('br').length;
+            const paragraphScore = pCount + (brCount / 2);
+
+            const score = textLength * (1 - linkDensity) * (paragraphScore + 1);
+            if (score > bestScore) {
+                bestScore = score;
+                bestEl = el;
+            }
+        });
+        
+        mainEl = bestEl;
+    }
+
+    if (!mainEl) {
+        mainEl = document.body;
+    }
+
+    // 2. Title & Chapter Extraction
+    let novelTitle = "";
+    const metaTitle = document.querySelector('meta[property="og:novel:book_name"], meta[name="novel:book_name"]');
+    if (metaTitle) {
+        novelTitle = metaTitle.getAttribute('content');
+    } else {
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) {
+            novelTitle = ogTitle.getAttribute('content');
+        } else {
+            novelTitle = document.title;
+        }
+    }
+    novelTitle = novelTitle.replace(/第\s*\d+\s*[章页].*$/, '').replace(/_.*$/, '').replace(/-.*$/, '').trim();
+
+    let chapterTitle = "";
+    const metaChap = document.querySelector('meta[property="og:novel:last_chapter_name"], meta[name="novel:last_chapter_name"]');
+    if (metaChap) {
+        chapterTitle = metaChap.getAttribute('content');
+    } else {
+        const heading = Array.from(document.querySelectorAll('h1, h2, .chapter-title, .title')).find(el => {
+            const txt = el.textContent;
+            return /第\s*\d+\s*章/.test(txt) || /Chương\s*\d+/.test(txt);
+        });
+        if (heading) {
+            chapterTitle = heading.textContent.trim();
+        } else {
+            const match = document.title.match(/(第\s*\d+\s*章[^\-_|]*)/) || document.title.match(/(Chương\s*\d+[^\-_|]*)/);
+            chapterTitle = match ? match[1].trim() : "Chương đọc";
+        }
+    }
+
+    let authorName = "";
+    const metaAuthor = document.querySelector('meta[property="og:novel:author"], meta[name="novel:author"]');
+    if (metaAuthor) {
+        authorName = metaAuthor.getAttribute('content');
+    }
+
+    let coverUrl = "";
+    const metaImage = document.querySelector('meta[property="og:image"], meta[name="novel:image"]');
+    if (metaImage) {
+        coverUrl = metaImage.getAttribute('content');
+    }
+
+    // 3. Clean Text
+    const clone = mainEl.cloneNode(true);
+    
+    // Remove ads, navigation, and other elements
+    const excludes = clone.querySelectorAll('script, style, iframe, button, a, .ads, .advertisement, .comment, .social-share, .footer, .header, #picker-container, [id*="google_ads"]');
+    excludes.forEach(el => el.remove());
+
+    let paragraphs = [];
+    const pTags = clone.querySelectorAll('p');
+    if (pTags.length > 5) {
+        pTags.forEach(p => {
+            const txt = p.innerText.trim();
+            if (txt && txt.length > 5 && !/chương trước|chương sau|trở lại|danh sách/i.test(txt)) {
+                paragraphs.push(txt);
+            }
+        });
+    } else {
+        const rawText = clone.innerText || '';
+        const lines = rawText.split(/\n+/);
+        lines.forEach(line => {
+            const txt = line.trim();
+            if (txt && txt.length > 5 && !/chương trước|chương sau|trở lại|danh sách/i.test(txt)) {
+                paragraphs.push(txt);
+            }
+        });
+    }
+
+    const cleanText = paragraphs.join('\n\n');
+
+    // Extract Index/TOC URL
+    let tocUrl = "";
+    const tocKeywords = ["mục lục", "danh sách chương", "目录", "回目录", "目录页", "index", "toc"];
+    const allLinks = Array.from(document.querySelectorAll('a'));
+    const foundLink = allLinks.find(a => {
+        const text = (a.innerText || '').toLowerCase();
+        return tocKeywords.some(kw => text.includes(kw));
+    });
+    if (foundLink) {
+        tocUrl = foundLink.href;
+    } else {
+        if (location.hostname.includes('hjwzw.com')) {
+            const match = location.pathname.match(/\/Book\/(?:Read|Chapter)\/(\d+)/);
+            if (match) {
+                tocUrl = `${location.origin}/Book/Chapter/${match[1]}`;
+            }
+        }
+    }
+
+    return {
+        novelTitle: novelTitle || "Truyện ngoài",
+        chapterTitle: chapterTitle || "Chương đọc",
+        author: authorName || "Tác giả ẩn",
+        cover: coverUrl || "",
+        text: cleanText,
+        paragraphs: paragraphs,
+        tocUrl: tocUrl
+    };
+}
+
+// ============================================================
+// 12. WEB AUTH SYNC (Auto Login)
+// ============================================================
+if (location.hostname === 'localhost' || location.hostname.endsWith('lyvuha.com')) {
+    const checkAndSyncAuth = () => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            const userStr = localStorage.getItem('user');
+            if (token && userStr) {
+                chrome.runtime.sendMessage({
+                    action: 'SYNC_WEB_AUTH',
+                    payload: { token, user: JSON.parse(userStr) }
+                });
+            }
+        } catch (e) {
+            console.log('[AutoSync] Error syncing auth:', e);
+        }
+    };
+    checkAndSyncAuth();
+    window.addEventListener('storage', checkAndSyncAuth);
+}
