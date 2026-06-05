@@ -501,7 +501,7 @@ async function getBackendHost(settings) {
         hosts.push(settings.apiHost.replace(/\/$/, ''));
     }
     hosts.push("https://tienhiep.lyvuha.com");
-    hosts.push("http://localhost:5051");
+    hosts.push("");
     
     for (const host of hosts) {
         try {
@@ -639,7 +639,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const { token, user } = request.payload;
         if (token && user) {
             chrome.storage.local.get(['serverUrl', 'settings'], (res) => {
-                const sUrl = res.serverUrl || "http://localhost:5051";
+                const sUrl = res.serverUrl || "";
                 chrome.storage.local.set({
                     serverAuthToken: token,
                     serverUser: user,

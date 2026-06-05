@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const BACKEND_CANDIDATES = [
   'https://tienhiep.lyvuha.com',
-  'http://localhost:5051',
-  'http://localhost:5050',
 ];
 
 export default function VipUpgradeModal({ show, onClose, onActivated }) {
@@ -426,16 +424,7 @@ export default function VipUpgradeModal({ show, onClose, onActivated }) {
               )}
             </div>
 
-            {/* Simulation Button for Local Testing */}
-            {activeHost.includes('localhost') && paymentStatus === 'pending' && (
-              <button
-                type="button"
-                onClick={handleSimulatePayment}
-                className="w-full py-1.5 border border-dashed border-amber-500/50 hover:bg-amber-500/5 text-amber-600 text-[10px] font-bold rounded-lg transition-all active:scale-[0.98] cursor-pointer text-center"
-              >
-                🛠️ GIẢ LẬP THANH TOÁN THÀNH CÔNG (Dành cho Dev)
-              </button>
-            )}
+
 
             <p className="text-[9px] text-center text-outline">
               ⚠️ Vui lòng nhập <strong>đúng nội dung chuyển khoản</strong> để hệ thống tự động xác nhận
