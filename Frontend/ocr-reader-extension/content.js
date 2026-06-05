@@ -67,44 +67,45 @@ function injectCSS() {
 // ============================================================
 // 3. TRANSLATION REQUEST
 // ============================================================
-async function requestTranslation(texts) {
-    return new Promise(resolve => {
-        try {
-            chrome.storage.local.get(['settings'], (resStorage) => {
-                const mode = resStorage?.settings?.mode || 'advanced';
-                chrome.runtime.sendMessage({ action: 'FETCH_TRANSLATE', payload: { texts } }, resp => {
-                    if (chrome.runtime.lastError || !resp?.success) {
-                        fetch('http://localhost:5050/translate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ texts, mode })
-                        }).then(r => r.json()).then(d => resolve(d.translations ?? null)).catch(() => resolve(null));
-                    } else {
-                        resolve(resp.data?.translations ?? null);
-                    }
-                });
-            });
-        } catch { 
-            fetch('http://localhost:5050/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ texts })
-            }).then(r => r.json()).then(d => resolve(d.translations ?? null)).catch(() => resolve(null));
-        }
-    });
+async function requestTranslationStream(texts, onChunk, onComplete) {
+    if (!texts || texts.length === 0) {
+        onComplete();
+        return;
+    }
+
+    try {
+        const port = chrome.runtime.connect({ name: "translate_stream" });
+        port.onMessage.addListener((msg) => {
+            if (msg.type === "CHUNK") {
+                onChunk(msg.index, msg.text);
+            } else if (msg.type === "DONE" || msg.type === "ERROR") {
+                onComplete();
+                port.disconnect();
+            }
+        });
+        port.postMessage({ action: "START", payload: { texts } });
+    } catch (e) {
+        // Fallback to old fetch if extension context is lost
+        fetch('http://localhost:5050/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texts })
+        }).then(r => r.json()).then(d => {
+            if (d.translations) {
+                d.translations.forEach((t, i) => onChunk(i, t));
+            }
+            onComplete();
+        }).catch(() => onComplete());
+    }
 }
 
 // ============================================================
 // 4. APPLY TO DOM
 // ============================================================
-function applyBatch(nodes, indices, translations) {
-    if (!translations) return;
-    translations.forEach((t, j) => {
-        const node = nodes[indices[j]];
-        if (!node?.parentNode) return;
-        node.nodeValue = t;
-        translatedNodes.add(node);
-    });
+function applyChunk(node, translation) {
+    if (!translation || !node || !node.parentNode) return;
+    node.nodeValue = translation;
+    translatedNodes.add(node);
 }
 
 // ============================================================
@@ -118,11 +119,19 @@ async function translateAllPending() {
     if (isTranslating || pending.size === 0) return;
     isTranslating = true;
 
-    console.log(`[Translator] Bắt đầu dịch liên tục...`);
+    console.log(`[Translator] Bắt đầu dịch liên tục (Streaming)...`);
 
-    while (pending.size > 0) {
+    const processNextChunk = () => {
+        if (pending.size === 0) {
+            isTranslating = false;
+            if (typeof checkAndTriggerAutoNext === 'function') {
+                checkAndTriggerAutoNext(false);
+            }
+            return;
+        }
+
         const sorted = Array.from(pending);
-        const chunkSize = 200; // Optimal batch size for translation API requests
+        const chunkSize = 200; // Optimal batch size
         const chunk = sorted.slice(0, chunkSize);
         
         const validChunk = chunk.filter(idx => {
@@ -132,26 +141,24 @@ async function translateAllPending() {
 
         if (validChunk.length > 0) {
             const textsToTranslate = validChunk.map(idx => allTexts[idx]);
-            const t = await requestTranslation(textsToTranslate);
-            if (t) {
-                applyBatch(allNodes, validChunk, t);
-            }
+            
+            requestTranslationStream(textsToTranslate, (localIndex, trans) => {
+                // Applied immediately when received
+                const globalIndex = validChunk[localIndex];
+                applyChunk(allNodes[globalIndex], trans);
+                pending.delete(globalIndex);
+            }, () => {
+                // On complete, recursively process next chunk
+                chunk.forEach(idx => pending.delete(idx));
+                processNextChunk();
+            });
+        } else {
+            chunk.forEach(idx => pending.delete(idx));
+            processNextChunk();
         }
-        
-        // Remove processed chunk from pending set to prevent infinite loop
-        chunk.forEach(idx => pending.delete(idx));
-        
-        // Yield execution to the CPU thread slightly before the next batch
-        await new Promise(r => setTimeout(r, 40));
-    }
-
-    console.log(`[Translator] Dịch hoàn tất toàn bộ hàng đợi!`);
-    isTranslating = false;
-
-    // Trigger auto-next check now that translation is complete (for short pages or already at bottom)
-    if (typeof checkAndTriggerAutoNext === 'function') {
-        checkAndTriggerAutoNext(false);
-    }
+    };
+    
+    processNextChunk();
 }
 
 // ============================================================

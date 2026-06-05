@@ -530,6 +530,89 @@ function fallbackToOffline(texts, mode, sendResponse) {
         });
 }
 
+chrome.runtime.onConnect.addListener((port) => {
+    if (port.name === "translate_stream") {
+        port.onMessage.addListener((msg) => {
+            if (msg.action === "START") {
+                chrome.storage.local.get(['settings', 'serverAuthToken'], (result) => {
+                    const settings = result.settings || {};
+                    const token = result.serverAuthToken;
+                    const engineType = settings.engineType || 'browser';
+                    const mode = settings.mode || 'advanced';
+                    
+                    if (engineType === 'browser') {
+                        ensureDictionariesLoaded().then(() => {
+                            msg.payload.texts.forEach((t, i) => {
+                                port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) });
+                            });
+                            port.postMessage({ type: "DONE" });
+                        }).catch(e => port.postMessage({ type: "ERROR", error: e.message }));
+                    } else {
+                        getBackendHost(settings).then((host) => {
+                            if (!host) {
+                                ensureDictionariesLoaded().then(() => {
+                                    msg.payload.texts.forEach((t, i) => port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) }));
+                                    port.postMessage({ type: "DONE" });
+                                });
+                                return;
+                            }
+                            
+                            const headers = {
+                                "Content-Type": "application/json",
+                                "X-VIP-Key": settings.vipKey || ""
+                            };
+                            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                            fetch(`${host}/translate_stream`, {
+                                method: "POST",
+                                headers: headers,
+                                body: JSON.stringify({ texts: msg.payload.texts, mode, vip_key: settings.vipKey || "" })
+                            }).then(async (res) => {
+                                if (res.status === 403) {
+                                    const data = await res.json();
+                                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                                        if (tabs && tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { action: "SHOW_LIMIT_ALERT", message: data.error });
+                                    });
+                                    throw new Error(data.error);
+                                }
+                                
+                                const reader = res.body.getReader();
+                                const decoder = new TextDecoder();
+                                let buffer = '';
+                                
+                                while (true) {
+                                    const { done, value } = await reader.read();
+                                    if (done) break;
+                                    buffer += decoder.decode(value, { stream: true });
+                                    
+                                    const lines = buffer.split('\n\n');
+                                    buffer = lines.pop(); // Keep incomplete part
+                                    
+                                    for (const line of lines) {
+                                        if (line.startsWith('data: ')) {
+                                            try {
+                                                const data = JSON.parse(line.substring(6));
+                                                port.postMessage({ type: "CHUNK", index: data.index, text: data.text });
+                                            } catch(e) {}
+                                        }
+                                    }
+                                }
+                                port.postMessage({ type: "DONE" });
+                            }).catch(err => {
+                                console.warn(`[Extension Background] Streaming failed. Falling back...`, err);
+                                ensureDictionariesLoaded().then(() => {
+                                    msg.payload.texts.forEach((t, i) => port.postMessage({ type: "CHUNK", index: i, text: translateParagraph(t, mode) }));
+                                    port.postMessage({ type: "DONE" });
+                                });
+                            });
+                        });
+                    }
+                });
+            }
+        });
+    }
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_TRANSLATE") {
         chrome.storage.local.get(['settings', 'serverAuthToken'], (result) => {
