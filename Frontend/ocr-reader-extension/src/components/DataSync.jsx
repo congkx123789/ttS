@@ -17,7 +17,7 @@ export default function DataSync({ onSyncFinished }) {
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['serverUrl', 'settings', 'serverUser'], (res) => {
-        const storedUrl = res.serverUrl || (res.settings && res.settings.apiHost) || 'https://api-tienhiep.lyvuha.com';
+        const storedUrl = res.serverUrl || (res.settings && res.settings.apiHost) || 'https://tienhiep.lyvuha.com';
         setServerUrl(storedUrl);
         setInputUrl(storedUrl);
         if (res.serverUser) {
@@ -26,7 +26,7 @@ export default function DataSync({ onSyncFinished }) {
         setIsUrlLoaded(true);
       });
     } else {
-      const storedUrl = localStorage.getItem('serverUrl') || 'https://api-tienhiep.lyvuha.com';
+      const storedUrl = localStorage.getItem('serverUrl') || 'https://tienhiep.lyvuha.com';
       setServerUrl(storedUrl);
       setInputUrl(storedUrl);
       setIsUrlLoaded(true);

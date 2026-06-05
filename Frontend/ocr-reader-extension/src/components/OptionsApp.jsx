@@ -4,7 +4,7 @@ import DBSearch from './DBSearch';
 export default function OptionsApp() {
   const [activeTab, setActiveTab] = useState('general'); // 'general', 'ai', 'dict', 'tts', 'search', 'history'
   const [settings, setSettings] = useState({
-    apiHost: 'https://api.tienhiep.lyvuha.com',
+    apiHost: 'https://tienhiep.lyvuha.com',
     engineType: 'browser',
     mode: 'advanced',
     autoTranslate: false,
@@ -295,7 +295,7 @@ export default function OptionsApp() {
 
       const fetchCloudTTS = async () => {
         try {
-          const host = settings.apiHost || 'https://api-tienhiep.lyvuha.com';
+          const host = settings.apiHost || 'https://tienhiep.lyvuha.com';
           const cleanedHost = host.replace(/\/$/, '');
           const res = await fetch(`${cleanedHost}/v1/audio/speech`, {
             method: 'POST',
@@ -336,7 +336,7 @@ export default function OptionsApp() {
 
   // Helper to dynamically get EPUB host mapped from settings.apiHost
   const getEpubHost = () => {
-    const host = (settings.apiHost || 'https://api.tienhiep.lyvuha.com').replace(/\/$/, '');
+    const host = (settings.apiHost || 'https://tienhiep.lyvuha.com').replace(/\/$/, '');
     if (host.includes('dich.lyvuha.com')) {
       return host.replace('dich.lyvuha.com', 'tienhiep.lyvuha.com');
     }
@@ -630,7 +630,7 @@ export default function OptionsApp() {
         if (result.offlineTranslationHistory) {
           setHistory(result.offlineTranslationHistory);
         }
-        const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
+        const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
         syncVipStatus(host);
       });
     } else {
@@ -647,7 +647,7 @@ export default function OptionsApp() {
         { title: 'Khai Cục Trưởng Sinh Vạn Cổ', url: 'https://faloo.com/1234.html', timestamp: Date.now() - 3600000 },
         { title: 'Hệ Thống Phú Ngã Trưởng Sinh', url: 'https://qidian.com/5678.html', timestamp: Date.now() - 7200000 }
       ]);
-      const host = (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
+      const host = (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
       syncVipStatus(host);
     }
   }, []);
@@ -915,7 +915,7 @@ export default function OptionsApp() {
                       type="text"
                       value={settings.apiHost}
                       onChange={(e) => updateSetting('apiHost', e.target.value)}
-                      placeholder="https://api-tienhiep.lyvuha.com"
+                      placeholder="https://tienhiep.lyvuha.com"
                       className="flex-1 h-9 px-3 border border-gray-300 rounded-lg text-xs outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                     />
                     <button 

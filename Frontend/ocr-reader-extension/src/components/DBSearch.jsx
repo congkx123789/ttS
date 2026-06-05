@@ -25,8 +25,8 @@ export default function DBSearch() {
     const probeBackend = async () => {
       const candidates = [
         'https://tienhiep.lyvuha.com',
-        'https://api-tienhiep.lyvuha.com',
-        'https://api.tienhiep.lyvuha.com',
+        'https://tienhiep.lyvuha.com',
+        'https://tienhiep.lyvuha.com',
         'http://localhost:5050',
         'http://localhost:5000'
       ];

@@ -593,7 +593,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Read user session from storage to determine if online or offline
         chrome.storage.local.get(['serverUser', 'serverUrl'], (storageRes) => {
             const user = storageRes.serverUser;
-            const serverUrl = storageRes.serverUrl || "https://api-tienhiep.lyvuha.com";
+            const serverUrl = storageRes.serverUrl || "https://tienhiep.lyvuha.com";
 
             if (user) {
                 // User is logged in -> Sync online (SQLite database)

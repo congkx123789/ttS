@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 
 export default function AnalysisResult({ data, onBack }) {
   const [translation, setTranslation] = useState('Đang phân tích...');
-  const [activeHost, setActiveHost] = useState('https://api.tienhiep.lyvuha.com');
+  const [activeHost, setActiveHost] = useState('https://tienhiep.lyvuha.com');
 
   useEffect(() => {
     const getHostAndTranslate = async () => {
-      let host = 'https://api.tienhiep.lyvuha.com';
+      let host = 'https://tienhiep.lyvuha.com';
       if (typeof chrome !== 'undefined' && chrome.storage) {
         const stored = await new Promise((resolve) => {
           chrome.storage.local.get(['settings'], (result) => {
@@ -21,7 +21,7 @@ export default function AnalysisResult({ data, onBack }) {
       // Probe candidate hosts if connection fails
       const candidates = [
         host,
-        'https://api.tienhiep.lyvuha.com',
+        'https://tienhiep.lyvuha.com',
         'http://localhost:5050',
         'http://localhost:5000'
       ];

@@ -198,7 +198,7 @@ function App() {
         try {
           if (typeof chrome !== 'undefined' && chrome.storage) {
             chrome.storage.local.get(['settings', 'serverUrl'], async (result) => {
-              const host = result.serverUrl || 'https://api-tienhiep.lyvuha.com';
+              const host = result.serverUrl || 'https://tienhiep.lyvuha.com';
               const settings = result.settings || {};
               
               const res = await fetch(`${host}/v1/audio/speech`, {
@@ -308,7 +308,7 @@ function App() {
               return loadedSettings;
             });
           }
-          const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
+          const host = result.serverUrl || (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
           syncVipStatus(host);
         });
       } else {
@@ -320,7 +320,7 @@ function App() {
             setSettings(loadedSettings);
           } catch (e) {}
         }
-        const host = (loadedSettings && loadedSettings.apiHost) || 'https://api-tienhiep.lyvuha.com';
+        const host = (loadedSettings && loadedSettings.apiHost) || 'https://tienhiep.lyvuha.com';
         syncVipStatus(host);
       }
     };

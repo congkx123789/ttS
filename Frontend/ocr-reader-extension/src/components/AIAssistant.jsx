@@ -9,7 +9,7 @@ export default function AIAssistant() {
   ]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [serverUrl, setServerUrl] = useState('https://api-tienhiep.lyvuha.com');
+  const [serverUrl, setServerUrl] = useState('https://tienhiep.lyvuha.com');
   const [settings, setSettings] = useState({
     aiModel: 'gemini-1.5-flash',
     aiKey: '',
