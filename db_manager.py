@@ -194,7 +194,7 @@ class PgConnectionWrapper:
                               "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
             sql = sql.replace("DATETIME", "TIMESTAMP")
             sql = sql.replace("UNIQUE(user_id, book_id)",
-                              "CONSTRAINT unique_user_book UNIQUE(user_id, book_id)")
+                              "UNIQUE(user_id, book_id)")
         sql = sql.replace('?', '%s')
         return sql
 
