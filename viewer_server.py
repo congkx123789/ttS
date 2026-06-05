@@ -188,7 +188,7 @@ GOOGLE_OAUTH_CONFIG = {
 }
 
 # VIP Validation & Request Limits
-VALID_VIP_CODES = {"VIP2026", "ANTIGRAVITY", "PREMIUM_MEMBER", "VIP_TRANSLATOR"}
+VALID_VIP_CODES = {"VIP2026", "ANTIGRAVITY", "PREMIUM_MEMBER", "VIP_TRANSLATOR", "VIP_SERVER"}
 translation_limit_tracker = {} # Format: { "IP:YYYY-MM-DD": count }
 
 def is_vip_request():
