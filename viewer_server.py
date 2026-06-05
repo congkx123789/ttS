@@ -1,5 +1,5 @@
 import logging
-from flask import Flask, request, jsonify, render_template_string, session
+from flask import Flask, request, jsonify, redirect, session, send_from_directory, render_template_string, Response
 from flask_cors import CORS
 import sqlite3, math, os, sys, hashlib, re, unicodedata
 import bcrypt, jwt, secrets, hmac, time, json, requests
@@ -2116,6 +2116,58 @@ def translate():
                 
     return jsonify({"translations": translations})
 
+
+@app.route('/translate_stream', methods=['POST'])
+def translate_stream():
+    data = request.json
+    if not data or 'texts' not in data:
+        return jsonify({"error": "Missing 'texts' array"}), 400
+    
+    texts = data['texts']
+    
+    # 50-paragraph rate-limit for Standard users
+    if not is_vip_request():
+        import datetime
+        client_ip = get_client_ip()
+        today_str = datetime.date.today().isoformat()
+        tracker_key = f"{client_ip}:{today_str}"
+        
+        current_count = translation_limit_tracker.get(tracker_key, 0)
+        requested_count = len([t for t in texts if t.strip()])
+        
+        if current_count + requested_count > 50:
+            return jsonify({
+                "error": "Hạn mức dịch máy chủ Standard đã hết (50 đoạn/ngày). Vui lòng nâng cấp tài khoản VIP hoặc nhập mã kích hoạt VIP để dịch không giới hạn!"
+            }), 403
+            
+        translation_limit_tracker[tracker_key] = current_count + requested_count
+        
+    mode = data.get('mode')
+    eng = get_engine()
+
+    def generate():
+        import json
+        import time
+        for i, text in enumerate(texts):
+            if not text.strip():
+                trans = text
+            else:
+                try:
+                    trans = eng.translate(text, multi_option=False, mode=mode)
+                except Exception as e:
+                    print(f"Error translating: {e}")
+                    trans = text
+            # SSE format
+            yield f"data: {json.dumps({'index': i, 'text': trans}, ensure_ascii=False)}\n\n"
+            # Thêm độ trễ siêu nhỏ (1ms) để ép TCP Stack và Cloudflare xả Buffer từng cục
+            time.sleep(0.001)
+
+    response = Response(generate(), mimetype='text/event-stream')
+    response.headers['X-Accel-Buffering'] = 'no'  # Tell Nginx not to buffer
+    response.headers['Cache-Control'] = 'no-cache, no-transform' # Tell Cloudflare NOT to buffer/compress
+    response.headers['Connection'] = 'keep-alive'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 # Admin-configured API Key for VIP users to use AI without entering personal key
 ADMIN_GEMINI_KEY = os.environ.get("ADMIN_GEMINI_KEY", "")
