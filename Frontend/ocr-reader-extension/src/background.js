@@ -568,10 +568,19 @@ chrome.runtime.onConnect.addListener((port) => {
                             };
                             if (token) headers['Authorization'] = `Bearer ${token}`;
 
+                            const controller = new AbortController();
+                            port.onDisconnect.addListener(() => {
+                                console.log("[Background] Port disconnected. Aborting translation stream.");
+                                try {
+                                    controller.abort();
+                                } catch(e) {}
+                            });
+
                             fetch(`${host}/translate_stream`, {
                                 method: "POST",
                                 headers: headers,
-                                body: JSON.stringify({ texts: msg.payload.texts, mode, vip_key: settings.vipKey || "" })
+                                body: JSON.stringify({ texts: msg.payload.texts, mode, vip_key: settings.vipKey || "" }),
+                                signal: controller.signal
                             }).then(async (res) => {
                                 if (res.status === 403) {
                                     const data = await res.json();

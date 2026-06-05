@@ -20,10 +20,13 @@ function extractUsingTreeWalker() {
             const tag = node.parentNode?.nodeName;
             if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') continue;
             
-            const val = node.nodeValue;
+            const val = node.__original_chinese__ || node.nodeValue;
             if (!val || !val.trim()) continue;
             
             if (/[\u4e00-\u9fa5]/.test(val)) {
+                if (!node.__original_chinese__) {
+                    node.__original_chinese__ = val;
+                }
                 if (translatedNodes.has(node)) {
                     // DOM Recycling: If already translated but now contains Chinese again, clean and translate it.
                     translatedNodes.delete(node);
@@ -390,10 +393,47 @@ chrome.storage.local.get(['autoTranslate'], r => {
     }
 });
 
+function stopAndRevertTranslation() {
+    isTranslating = false;
+    const stack = [document.body];
+    while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        if (node.nodeType === Node.TEXT_NODE) {
+            if (node.__original_chinese__) {
+                node.nodeValue = node.__original_chinese__;
+            }
+        } else {
+            if (node.shadowRoot) stack.push(node.shadowRoot);
+            let child = node.lastChild;
+            while (child) {
+                stack.push(child);
+                child = child.previousSibling;
+            }
+        }
+    }
+    allNodes = [];
+    allTexts = [];
+    pending.clear();
+    translatedNodes = new WeakSet();
+}
+
 chrome.storage.onChanged.addListener((changes, ns) => {
-    if (ns === 'local' && changes.autoTranslate) {
-        autoEnabled = changes.autoTranslate.newValue;
-        if (autoEnabled) autoTranslate();
+    if (ns === 'local') {
+        if (changes.autoTranslate) {
+            autoEnabled = changes.autoTranslate.newValue;
+            if (autoEnabled) {
+                autoTranslate();
+            } else {
+                stopAndRevertTranslation();
+            }
+        }
+        if (changes.settings) {
+            if (autoEnabled || allNodes.length > 0) {
+                console.log("[Extension Content] Settings changed (Engine or Mode). Re-translating page...");
+                startSession(true);
+            }
+        }
     }
 });
 

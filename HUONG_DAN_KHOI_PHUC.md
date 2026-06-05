@@ -5,7 +5,7 @@ Tài liệu này hướng dẫn cách khôi phục lại toàn bộ hệ thống
 ---
 
 ## 🔒 BƯỚC 0: CHUẨN BỊ (QUAN TRỌNG NHẤT)
-Vì lý do bảo mật, Github và HuggingFace **không** lưu trữ các file chứa mật khẩu. Bạn bắt buộc phải có 2 file này từ máy tính cũ (hoặc tự tạo lại dựa trên file mẫu):
+Vì lý do bảo mật, Github và HuggingFace **không** lưu trữ các file chứa mật khẩu. Bạn bắt buộc phải có các file này từ máy tính cũ (hoặc tự tạo lại dựa trên file mẫu):
 1. `consolidated_keys.env`
 2. `.env` (Chứa mật khẩu Database Supabase, Email gửi OTP...)
 3. `gcp-key.json` (Để deploy lên Firebase nếu cần)
@@ -21,7 +21,7 @@ git clone git@github.com:congkx123789/ttS.git
 # Di chuyển vào thư mục dự án
 cd ttS
 ```
-*Sau khi tải xong, hãy Copy 3 file bảo mật ở BƯỚC 0 dán vào thư mục `ttS` này.*
+*Sau khi tải xong, hãy Copy các file bảo mật ở BƯỚC 0 dán vào thư mục `ttS` này.*
 
 ---
 
@@ -57,7 +57,31 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 BƯỚC 4: KHỞI ĐỘNG HỆ THỐNG
+## 🔌 BƯỚC 4: KHÔI PHỤC VÀ PHÁT TRIỂN CHROME EXTENSION (MỚI)
+Mã nguồn phát triển của Chrome Extension nằm tại thư mục `Frontend/ocr-reader-extension/` bên trong source code.
+
+### A. Thiết lập môi trường phát triển trên máy mới:
+1. Đảm bảo máy mới đã cài **Node.js** (khuyến nghị phiên bản LTS 18 hoặc 20+).
+2. Di chuyển vào thư mục extension:
+   ```bash
+   cd Frontend/ocr-reader-extension
+   ```
+3. Cài đặt các package phụ thuộc:
+   ```bash
+   npm install
+   ```
+4. Khởi động môi trường dev (tự động phát hiện và đồng bộ code lên Chrome):
+   ```bash
+   npm run dev
+   ```
+5. Mở Chrome, truy cập `chrome://extensions/`, bật **Chế độ dành cho nhà phát triển (Developer Mode)** ở góc trên bên phải, click **Tải thư mục đã giải nén (Load unpacked)** và chọn thư mục `/Frontend/ocr-reader-extension/dist`.
+
+### B. Nộp extension lên Chrome Web Store (Hoặc backup bản chạy ngay):
+* File `chrome_extension_submit.zip` nằm ngoài thư mục gốc là bản build hoàn chỉnh và được tối ưu hóa. Bạn có thể sử dụng file này tải trực tiếp lên Chrome Developer Web Store để publish ứng dụng mà không cần build lại.
+
+---
+
+## 🚀 BƯỚC 5: KHỞI ĐỘNG HỆ THỐNG BACKEND
 Hệ thống của bạn đã khôi phục 100% về trạng thái cũ! Bây giờ bạn chỉ việc chạy:
 
 ```bash
@@ -69,4 +93,4 @@ Hệ thống sẽ chạy ở port `5051`.
 *Lưu ý: Nếu bạn muốn chạy tên miền `api-tienhiep.lyvuha.com`, hãy đảm bảo cài đặt và chạy Cloudflared Tunnel trỏ vào `localhost:5051` giống như máy tính cũ.*
 
 ---
-🎉 **CHÚC BẠN KHÔI PHỤC THÀNH CÔNG!** 🎉
+🎉 **CHÚC BẠN KHÔI PHỤC THÀNH CÔNG VÀ TIẾP TỤC PHÁT TRIỂN THUẬN LỢI!** 🎉
