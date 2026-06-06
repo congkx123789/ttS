@@ -8,7 +8,7 @@ import uuid
 import html
 import tempfile
 import time
-from bs4 import BeautifulSoup
+# Removed bs4 import to avoid XHTML corruption
 
 class EpubWriter:
     def __init__(self, title, author="Unknown", cover_img_bytes=None, cover_ext="jpg", description=""):
@@ -203,28 +203,31 @@ def apply_custom_dictionary(text, custom_dict):
 def clean_html_styles(html_content):
     """
     Strips inline CSS styles, custom font faces, and external stylesheets
-    to optimize EPUB files for mobile readers (ensuring standard responsive formatting).
+    using regex to strictly preserve the original XHTML structure.
     """
-    try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        # Remove style tags
-        for style in soup.find_all('style'):
-            style.decompose()
-        # Remove link tags with stylesheets
-        for link in soup.find_all('link', rel='stylesheet'):
-            link.decompose()
-        # Remove style attributes from all tags
-        for tag in soup.find_all(True):
-            if tag.has_attr('style'):
-                del tag['style']
-            if tag.has_attr('class'):
-                del tag['class']
-        return str(soup)
-    except Exception:
-        # Fallback to regex if bs4 fails
-        cleaned = re.sub(r'style="[^"]*"', '', html_content)
-        cleaned = re.sub(r'<style[^>]*>.*?</style>', '', cleaned, flags=re.DOTALL)
-        return cleaned
+    # Remove inline style attributes
+    cleaned = re.sub(r'\s+style="[^"]*"', '', html_content)
+    cleaned = re.sub(r"\s+style='[^']*'", '', cleaned)
+    # Remove class attributes
+    cleaned = re.sub(r'\s+class="[^"]*"', '', cleaned)
+    cleaned = re.sub(r"\s+class='[^']*'", '', cleaned)
+    # Remove style tags and their contents
+    cleaned = re.sub(r'<style[^>]*>.*?</style>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    # Remove stylesheet links
+    cleaned = re.sub(r'<link[^>]*rel="stylesheet"[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<link[^>]*rel=\'stylesheet\'[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+def clean_punctuation_spacing(text):
+    if not text:
+        return text
+    # Strip weird quotes and brackets
+    text = re.sub(r'["“”‘’\'『』「」【】()\[\]{}<>]', '', text)
+    # Format punctuation spacing
+    text = re.sub(r'([,;.:!?])(?=[^\s])', r'\1 ', text)
+    text = re.sub(r'\s+([,;.:!?])', r'\1', text)
+    text = re.sub(r'\s*-\s*', ' - ', text)
+    return re.sub(r'\s+', ' ', text).strip()
 
 
 def translate_html_content_advanced(html_content, engine, mode=None, custom_dict=None, clean_styles=False):
@@ -250,6 +253,7 @@ def translate_html_content_advanced(html_content, engine, mode=None, custom_dict
                 txt = apply_custom_dictionary(part, custom_dict)
                 # Translate through engine
                 translated_text = engine.translate(txt, multi_option=False, mode=mode)
+                translated_text = clean_punctuation_spacing(translated_text)
                 translated_parts.append(translated_text)
             else:
                 translated_parts.append(part)
