@@ -652,5 +652,227 @@ class TestCommunitySecurityOperations(unittest.TestCase):
         print("   ✅ Chặn Authorization header sai định dạng — 401")
 
 
+class TestUnfriendBlockSecurity(unittest.TestCase):
+    """Kiểm thử bảo mật đầy đủ: Hủy kết bạn, Chặn/Bỏ chặn user, Nhắn tin sau block."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config['TESTING'] = True
+        cls.client = cls.app.test_client()
+
+        conn = get_user_db_conn()
+        try:
+            conn.execute("DROP TABLE IF EXISTS users")
+            conn.execute("DROP TABLE IF EXISTS direct_messages")
+            conn.execute("DROP TABLE IF EXISTS friendships")
+            conn.execute("DROP TABLE IF EXISTS personal_notifications")
+
+            from backend.database.db_manager import _init_db_schema_for_conn
+            _init_db_schema_for_conn(conn)
+
+            # 4 người dùng: A, B, C, D
+            users = [
+                (1, "user_a", "A@code", hash_password("passA")),
+                (2, "user_b", "B@code", hash_password("passB")),
+                (3, "user_c", "C@code", hash_password("passC")),
+                (4, "user_d", "D@code", hash_password("passD")),
+            ]
+            for uid, uname, ucode, uhash in users:
+                conn.execute(
+                    "INSERT INTO users (id, username, user_code, password_hash, vip_status) VALUES (?, ?, ?, ?, 0)",
+                    (uid, uname, ucode, uhash)
+                )
+            # Gieo sẵn quan hệ bạn bè accepted giữa A-B và A-C
+            for u1, u2 in [(1, 2), (2, 1), (1, 3), (3, 1)]:
+                conn.execute(
+                    "INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, 'accepted')",
+                    (u1, u2)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        cls.tok_a = create_access_token(user_id=1, username="user_a", vip_status=0)
+        cls.tok_b = create_access_token(user_id=2, username="user_b", vip_status=0)
+        cls.tok_c = create_access_token(user_id=3, username="user_c", vip_status=0)
+        cls.tok_d = create_access_token(user_id=4, username="user_d", vip_status=0)
+
+        cls.hdra = {"Authorization": f"Bearer {cls.tok_a}", "Content-Type": "application/json"}
+        cls.hdrb = {"Authorization": f"Bearer {cls.tok_b}", "Content-Type": "application/json"}
+        cls.hdrc = {"Authorization": f"Bearer {cls.tok_c}", "Content-Type": "application/json"}
+        cls.hdrd = {"Authorization": f"Bearer {cls.tok_d}", "Content-Type": "application/json"}
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists("test_users_data_security.db"):
+            os.remove("test_users_data_security.db")
+
+    # ----------------------------------------------------------
+    # TEST 5: Hủy kết bạn & kiểm tra phân quyền nhắn tin
+    # ----------------------------------------------------------
+    def test_05_unfriend_flow(self):
+        """A hủy kết bạn B → A vẫn nhắn tin được (vì không block) → B cũng vẫn nhắn được."""
+        print("\n💔 [TEST] Hủy kết bạn (unfriend)...")
+
+        # 1. Xác nhận ban đầu A và B là bạn
+        res_list = self.client.get("/api/friends/list", headers=self.hdra)
+        friends_before = [f["id"] for f in res_list.json.get("friends", [])]
+        self.assertIn(2, friends_before)
+        print("   ✅ Trước unfriend: A và B là bạn")
+
+        # 2. A hủy kết bạn B
+        res_unf = self.client.post("/api/friends/unfriend", headers=self.hdra,
+                                   json={"friend_id": 2})
+        self.assertEqual(res_unf.status_code, 200)
+        self.assertTrue(res_unf.json["success"])
+        print("   ✅ A hủy kết bạn B thành công")
+
+        # 3. Xác nhận B đã biến khỏi danh sách bạn bè của A
+        res_list2 = self.client.get("/api/friends/list", headers=self.hdra)
+        friends_after = [f["id"] for f in res_list2.json.get("friends", [])]
+        self.assertNotIn(2, friends_after)
+        print("   ✅ B không còn trong danh sách bạn bè của A")
+
+        # 4. Hủy lần nữa → phải báo lỗi 404
+        res_unf2 = self.client.post("/api/friends/unfriend", headers=self.hdra,
+                                    json={"friend_id": 2})
+        self.assertEqual(res_unf2.status_code, 404)
+        print("   ✅ Hủy kết bạn khi không có quan hệ → 404")
+
+        # 5. Sau unfriend, A vẫn có thể nhắn tin cho B (unfriend ≠ block)
+        res_msg = self.client.post("/api/messages/send", headers=self.hdra,
+                                   json={"receiver_id": 2, "message": "Dù không còn bạn, vẫn gửi tin được nhé!"})
+        self.assertEqual(res_msg.status_code, 200)
+        print("   ✅ Sau unfriend, A vẫn nhắn tin được cho B (không bị block)")
+
+        # 6. B cũng nhắn tin ngược lại được
+        res_msg_b = self.client.post("/api/messages/send", headers=self.hdrb,
+                                     json={"receiver_id": 1, "message": "OK bạn ơi!"})
+        self.assertEqual(res_msg_b.status_code, 200)
+        print("   ✅ B vẫn nhắn lại được cho A")
+
+    # ----------------------------------------------------------
+    # TEST 6: Block user — Ngăn nhắn tin hoàn toàn
+    # ----------------------------------------------------------
+    def test_06_block_user_prevents_messaging(self):
+        """A chặn C → C không thể nhắn tin cho A → A cũng không nhắn được cho C (đang chặn)."""
+        print("\n🚫 [TEST] Chặn người dùng (block)...")
+
+        # 1. Xác nhận A và C đang là bạn
+        res = self.client.get("/api/friends/list", headers=self.hdra)
+        self.assertIn(3, [f["id"] for f in res.json.get("friends", [])])
+        print("   ✅ Trước block: A và C là bạn")
+
+        # 2. A chặn C
+        res_block = self.client.post("/api/friends/block", headers=self.hdra,
+                                     json={"user_id": 3})
+        self.assertEqual(res_block.status_code, 200)
+        self.assertTrue(res_block.json["success"])
+        print("   ✅ A chặn C thành công")
+
+        # 3. Chặn lần nữa → phải báo lỗi 400 (đã chặn rồi)
+        res_block2 = self.client.post("/api/friends/block", headers=self.hdra,
+                                      json={"user_id": 3})
+        self.assertEqual(res_block2.status_code, 400)
+        print("   ✅ Chặn trùng → 400")
+
+        # 4. Không thể tự chặn mình → 400
+        res_self = self.client.post("/api/friends/block", headers=self.hdra,
+                                    json={"user_id": 1})
+        self.assertEqual(res_self.status_code, 400)
+        print("   ✅ Không thể tự chặn chính mình → 400")
+
+        # 5. C bị chặn bởi A → C gửi tin cho A phải bị chặn 403
+        res_c_to_a = self.client.post("/api/messages/send", headers=self.hdrc,
+                                      json={"receiver_id": 1, "message": "A ơi, nghe ta nói!"})
+        self.assertEqual(res_c_to_a.status_code, 403)
+        print("   ✅ C bị chặn → gửi tin cho A → 403 Forbidden")
+
+        # 6. A đang chặn C → A cũng không gửi được cho C → 403
+        res_a_to_c = self.client.post("/api/messages/send", headers=self.hdra,
+                                      json={"receiver_id": 3, "message": "Ta đang chặn ngươi!"})
+        self.assertEqual(res_a_to_c.status_code, 403)
+        print("   ✅ A đang chặn C → A gửi cho C → 403 Forbidden")
+
+        # 7. C không còn trong danh sách bạn bè của A (block xóa quan hệ bạn bè)
+        res_list = self.client.get("/api/friends/list", headers=self.hdra)
+        friend_ids = [f["id"] for f in res_list.json.get("friends", [])]
+        self.assertNotIn(3, friend_ids)
+        print("   ✅ Sau block: C không còn trong danh sách bạn bè của A")
+
+        # 8. Kiểm tra danh sách blocked của A chứa C
+        res_blocked = self.client.get("/api/friends/blocked-list", headers=self.hdra)
+        self.assertEqual(res_blocked.status_code, 200)
+        blocked_ids = [u["id"] for u in res_blocked.json.get("blocked_users", [])]
+        self.assertIn(3, blocked_ids)
+        print("   ✅ Danh sách blocked của A chứa C")
+
+        # 9. D không bị chặn → A vẫn nhắn được cho D bình thường
+        res_a_to_d = self.client.post("/api/messages/send", headers=self.hdra,
+                                      json={"receiver_id": 4, "message": "D ơi chào!"})
+        self.assertEqual(res_a_to_d.status_code, 200)
+        print("   ✅ A nhắn tin cho D (không bị block) → thành công")
+
+    # ----------------------------------------------------------
+    # TEST 7: Bỏ chặn & khôi phục nhắn tin
+    # ----------------------------------------------------------
+    def test_07_unblock_restores_messaging(self):
+        """A bỏ chặn C → C có thể nhắn tin cho A bình thường."""
+        print("\n✅ [TEST] Bỏ chặn (unblock) & khôi phục nhắn tin...")
+
+        # 1. Bỏ chặn user chưa bị chặn → 404
+        res_fail = self.client.post("/api/friends/unblock", headers=self.hdra,
+                                    json={"user_id": 4})
+        self.assertEqual(res_fail.status_code, 404)
+        print("   ✅ Bỏ chặn user chưa bị chặn → 404")
+
+        # 2. A bỏ chặn C (C đang bị chặn từ test_06)
+        res_unblock = self.client.post("/api/friends/unblock", headers=self.hdra,
+                                       json={"user_id": 3})
+        self.assertEqual(res_unblock.status_code, 200)
+        self.assertTrue(res_unblock.json["success"])
+        print("   ✅ A bỏ chặn C thành công")
+
+        # 3. Danh sách blocked của A không còn C
+        res_blocked = self.client.get("/api/friends/blocked-list", headers=self.hdra)
+        blocked_ids = [u["id"] for u in res_blocked.json.get("blocked_users", [])]
+        self.assertNotIn(3, blocked_ids)
+        print("   ✅ Danh sách blocked của A không còn C")
+
+        # 4. C có thể nhắn tin cho A bình thường sau khi bỏ chặn
+        res_c_msg = self.client.post("/api/messages/send", headers=self.hdrc,
+                                     json={"receiver_id": 1, "message": "Cảm ơn đã bỏ chặn ta!"})
+        self.assertEqual(res_c_msg.status_code, 200)
+        print("   ✅ Sau unblock: C nhắn tin cho A thành công")
+
+        # 5. A cũng gửi được cho C
+        res_a_msg = self.client.post("/api/messages/send", headers=self.hdra,
+                                     json={"receiver_id": 3, "message": "Thôi bỏ qua nhé!"})
+        self.assertEqual(res_a_msg.status_code, 200)
+        print("   ✅ Sau unblock: A nhắn tin cho C thành công")
+
+        # 6. Xác nhận tin nhắn được mã hóa trong DB (không clear-text)
+        conn = get_user_db_conn()
+        rows = conn.execute(
+            "SELECT message FROM direct_messages WHERE sender_id = 3 AND receiver_id = 1"
+        ).fetchall()
+        conn.close()
+        self.assertTrue(len(rows) > 0)
+        for row in rows:
+            self.assertTrue(row["message"].startswith("gAAAAA"),
+                            f"Tin nhắn không được mã hóa: {row['message'][:30]}")
+        print(f"   ✅ {len(rows)} tin nhắn của C→A trong DB đều được mã hóa AES (Fernet)")
+
+        # 7. Lịch sử chat A-C qua API trả về nội dung giải mã chính xác
+        res_hist = self.client.get("/api/messages/chat/3", headers=self.hdra)
+        self.assertEqual(res_hist.status_code, 200)
+        msgs = res_hist.json.get("messages", [])
+        decrypted_texts = [m["message"] for m in msgs]
+        self.assertIn("Cảm ơn đã bỏ chặn ta!", decrypted_texts)
+        self.assertIn("Thôi bỏ qua nhé!", decrypted_texts)
+        print("   ✅ API lịch sử chat giải mã chuẩn xác tất cả tin nhắn")
+
+
 if __name__ == "__main__":
     unittest.main()

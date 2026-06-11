@@ -574,28 +574,187 @@ def list_friends():
         conn.close()
 
 
+@user_features_bp.route("/api/friends/unfriend", methods=["POST"])
+@jwt_required
+def unfriend():
+    """Hủy kết bạn: Xóa quan hệ bạn bè cả hai chiều."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json or {}
+    friend_id = data.get("friend_id")
+    if not friend_id:
+        return jsonify({"error": "Thiếu friend_id"}), 400
+
+    conn = get_user_db_conn()
+    try:
+        # Kiểm tra quan hệ tồn tại và đang ở trạng thái accepted
+        rel = conn.execute(
+            """SELECT id FROM friendships
+               WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
+                 AND status = 'accepted'""",
+            (user["id"], friend_id, friend_id, user["id"])
+        ).fetchone()
+        if not rel:
+            return jsonify({"error": "Không tìm thấy quan hệ bạn bè"}), 404
+
+        # Xóa cả hai chiều
+        conn.execute(
+            "DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
+            (user["id"], friend_id, friend_id, user["id"])
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Đã hủy kết bạn."})
+    except Exception as e:
+        logger.error(f"Unfriend error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@user_features_bp.route("/api/friends/block", methods=["POST"])
+@jwt_required
+def block_user():
+    """Chặn người dùng: Xóa quan hệ bạn bè (nếu có) và ghi nhận trạng thái blocked."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json or {}
+    target_id = data.get("user_id")
+    if not target_id:
+        return jsonify({"error": "Thiếu user_id cần chặn"}), 400
+    if target_id == user["id"]:
+        return jsonify({"error": "Không thể tự chặn chính mình"}), 400
+
+    conn = get_user_db_conn()
+    try:
+        # Kiểm tra đã chặn chưa
+        already = conn.execute(
+            "SELECT id FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'blocked'",
+            (user["id"], target_id)
+        ).fetchone()
+        if already:
+            return jsonify({"error": "Bạn đã chặn người dùng này rồi"}), 400
+
+        # Xóa quan hệ bạn bè hai chiều (nếu có)
+        conn.execute(
+            "DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
+            (user["id"], target_id, target_id, user["id"])
+        )
+        # Ghi nhận block (một chiều: người chặn → người bị chặn)
+        conn.execute(
+            "INSERT OR REPLACE INTO friendships (user_id, friend_id, status) VALUES (?, ?, 'blocked')",
+            (user["id"], target_id)
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Đã chặn người dùng."})
+    except Exception as e:
+        logger.error(f"Block user error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@user_features_bp.route("/api/friends/unblock", methods=["POST"])
+@jwt_required
+def unblock_user():
+    """Bỏ chặn người dùng."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json or {}
+    target_id = data.get("user_id")
+    if not target_id:
+        return jsonify({"error": "Thiếu user_id cần bỏ chặn"}), 400
+
+    conn = get_user_db_conn()
+    try:
+        rel = conn.execute(
+            "SELECT id FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'blocked'",
+            (user["id"], target_id)
+        ).fetchone()
+        if not rel:
+            return jsonify({"error": "Bạn chưa chặn người dùng này"}), 404
+
+        conn.execute(
+            "DELETE FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'blocked'",
+            (user["id"], target_id)
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Đã bỏ chặn người dùng."})
+    except Exception as e:
+        logger.error(f"Unblock user error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@user_features_bp.route("/api/friends/blocked-list", methods=["GET"])
+@jwt_required
+def list_blocked():
+    """Lấy danh sách người dùng đang bị chặn."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    conn = get_user_db_conn()
+    try:
+        rows = conn.execute(
+            """SELECT u.id, u.username, u.user_code, u.avatar, f.created_at as blocked_at
+               FROM friendships f
+               JOIN users u ON f.friend_id = u.id
+               WHERE f.user_id = ? AND f.status = 'blocked'""",
+            (user["id"],)
+        ).fetchall()
+        return jsonify({"blocked_users": [serialize_row(r) for r in rows]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @user_features_bp.route("/api/messages/send", methods=["POST"])
+@jwt_required
 def send_message():
     user = get_current_user()
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    
+
     data = request.json or {}
     receiver_id = data.get("receiver_id")
     message = data.get("message", "").strip()
-    
+
     if not receiver_id or not message:
         return jsonify({"error": "Thiếu người nhận hoặc nội dung tin nhắn"}), 400
-    
+
     conn = get_user_db_conn()
     try:
+        # Kiểm tra bảo mật: Người nhận có đang chặn người gửi không?
+        blocked_by_receiver = conn.execute(
+            "SELECT id FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'blocked'",
+            (receiver_id, user["id"])
+        ).fetchone()
+        if blocked_by_receiver:
+            return jsonify({"error": "Không thể gửi tin nhắn đến người dùng này."}), 403
+
+        # Kiểm tra bảo mật: Người gửi có đang chặn người nhận không?
+        blocked_by_sender = conn.execute(
+            "SELECT id FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'blocked'",
+            (user["id"], receiver_id)
+        ).fetchone()
+        if blocked_by_sender:
+            return jsonify({"error": "Bạn đang chặn người dùng này. Bỏ chặn trước khi nhắn tin."}), 403
+
         enc_msg = encrypt_message(message)
         cursor = conn.execute(
             "INSERT INTO direct_messages (sender_id, receiver_id, message) VALUES (?, ?, ?)",
             (user["id"], receiver_id, enc_msg)
         )
         msg_id = cursor.lastrowid
-        
+
         conn.execute(
             "INSERT INTO personal_notifications (user_id, sender_id, type, message, related_id) VALUES (?, ?, 'message', ?, ?)",
             (receiver_id, user["id"], f"{user['username']} đã gửi cho bạn một tin nhắn mới.", msg_id)
