@@ -314,6 +314,15 @@ def _init_db_schema_for_conn(conn):
         vip_expiry DATETIME,
         email_verified INTEGER DEFAULT 0,
         require_password_change INTEGER DEFAULT 0,
+        display_name TEXT,
+        birthday TEXT,
+        gender TEXT,
+        bio TEXT,
+        avatar_frame TEXT DEFAULT 'default',
+        avatar TEXT,
+        two_factor INTEGER DEFAULT 0,
+        api_balance REAL DEFAULT 0.0,
+        user_code TEXT UNIQUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -348,7 +357,7 @@ def _init_db_schema_for_conn(conn):
     if "api_balance" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN api_balance REAL DEFAULT 0.0")
     if "user_code" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN user_code TEXT UNIQUE")
+        conn.execute("ALTER TABLE users ADD COLUMN user_code TEXT")
         # Backfill existing users with random 7-digit codes
         import random, string
         existing_users = conn.execute("SELECT id FROM users WHERE user_code IS NULL").fetchall()
@@ -557,7 +566,7 @@ def _init_db_schema_for_conn(conn):
             pass
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_user_code ON users(user_code)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_user_code ON users(user_code)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_reading_history_user_id ON reading_history(user_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_reading_history_url ON reading_history(url)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookshelf_user_id ON bookshelf(user_id)")
@@ -637,6 +646,21 @@ def _init_db_schema_for_conn(conn):
         FOREIGN KEY (creator_id) REFERENCES users(id)
     )
     """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS book_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        user_id INTEGER,
+        is_anonymous INTEGER DEFAULT 0,
+        content_ciphertext TEXT NOT NULL,
+        encrypted_aes_key TEXT NOT NULL,
+        aes_nonce TEXT NOT NULL,
+        aes_tag TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
 
     try:
         conn.execute("ALTER TABLE sects ADD COLUMN announcement TEXT")

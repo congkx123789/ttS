@@ -4,7 +4,7 @@ import unicodedata
 from flask import Blueprint, request, jsonify, session
 from backend.config import Config
 from backend.core.decorators import get_current_user
-from backend.core.security import verify_access_token
+from backend.core.security import verify_access_token, encrypt_asymmetric_hybrid, decrypt_asymmetric_hybrid
 from backend.core.rate_limit import check_rate_limit, check_ip_rate_limit, get_client_ip
 from backend.database.db_manager import get_db, get_mode_connection, get_user_db_conn
 from backend.services.book_service import search_books, clean_vietnamese_query
@@ -650,4 +650,84 @@ def get_author_details(author_name):
         "total_books": len(books),
         "books": books
     })
+
+
+@books_bp.route("/books/<int:book_id>/comments", methods=["POST"])
+def add_book_comment(book_id):
+    user = get_current_user()
+    data = request.json or {}
+    content = data.get("content", "").strip()
+    is_anonymous = int(data.get("is_anonymous", 0))
+    
+    if not content:
+        return jsonify({"error": "Nội dung bình luận không được để trống"}), 400
+        
+    user_id = user["id"] if user else None
+    
+    # Mã hóa Hybrid RSA-AES bảo mật
+    enc_data = encrypt_asymmetric_hybrid(content)
+    
+    conn = get_user_db_conn()
+    try:
+        conn.execute(
+            """INSERT INTO book_comments 
+               (book_id, user_id, is_anonymous, content_ciphertext, encrypted_aes_key, aes_nonce, aes_tag)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (book_id, user_id, is_anonymous, 
+             enc_data["ciphertext"], enc_data["encrypted_key"], enc_data["nonce"], enc_data["tag"])
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Gửi bình luận thành công!"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@books_bp.route("/books/<int:book_id>/comments", methods=["GET"])
+def get_book_comments(book_id):
+    conn = get_user_db_conn()
+    try:
+        rows = conn.execute(
+            """SELECT c.id, c.user_id, c.is_anonymous, c.content_ciphertext, c.encrypted_aes_key, 
+                      c.aes_nonce, c.aes_tag, c.created_at, u.username, u.avatar
+               FROM book_comments c
+               LEFT JOIN users u ON c.user_id = u.id
+               WHERE c.book_id = ?
+               ORDER BY c.created_at DESC""",
+            (book_id,)
+        ).fetchall()
+        
+        comments = []
+        for r in rows:
+            # Giải mã Hybrid RSA-AES
+            decrypted_content = decrypt_asymmetric_hybrid(
+                r["content_ciphertext"],
+                r["encrypted_aes_key"],
+                r["aes_nonce"],
+                r["aes_tag"]
+            )
+            
+            comment = {
+                "id": r["id"],
+                "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else r["created_at"],
+            }
+            
+            if r["is_anonymous"] == 1:
+                comment["username"] = "Đạo hữu ẩn danh"
+                comment["avatar"] = None
+                comment["user_id"] = None
+            else:
+                comment["username"] = r["username"] or "Khách viếng thăm"
+                comment["avatar"] = r["avatar"]
+                comment["user_id"] = r["user_id"]
+                
+            comment["content"] = decrypted_content
+            comments.append(comment)
+            
+        return jsonify({"comments": comments})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 

@@ -99,3 +99,129 @@ def decrypt_message(encrypted_message: str) -> str:
     except Exception:
         return encrypted_message
 
+import os
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+KEYS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "keys")
+PRIVATE_KEY_PATH = os.path.join(KEYS_DIR, "private_key.pem")
+PUBLIC_KEY_PATH = os.path.join(KEYS_DIR, "public_key.pem")
+
+def get_or_create_rsa_keys():
+    """Get RSA keys or generate if they don't exist."""
+    if not os.path.exists(KEYS_DIR):
+        os.makedirs(KEYS_DIR, exist_ok=True)
+        
+    if not os.path.exists(PRIVATE_KEY_PATH) or not os.path.exists(PUBLIC_KEY_PATH):
+        # Generate private key
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+        # Write private key
+        with open(PRIVATE_KEY_PATH, "wb") as f:
+            f.write(
+                private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption()
+                )
+            )
+        # Generate and write public key
+        public_key = private_key.public_key()
+        with open(PUBLIC_KEY_PATH, "wb") as f:
+            f.write(
+                public_key.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo
+                )
+            )
+
+def encrypt_asymmetric_hybrid(plaintext: str) -> dict:
+    """
+    Encrypt text using Hybrid Encryption (AES-256-GCM + RSA-2048).
+    Returns a dict with base64 encoded parts.
+    """
+    if not plaintext:
+        return {"ciphertext": "", "encrypted_key": "", "nonce": "", "tag": ""}
+    
+    # Ensure keys exist
+    get_or_create_rsa_keys()
+    
+    # 1. Generate random 256-bit AES key and 12-byte nonce
+    aes_key = os.urandom(32)
+    nonce = os.urandom(12)
+    
+    # 2. Encrypt plaintext using AES-GCM
+    cipher = Cipher(algorithms.AES(aes_key), modes.GCM(nonce))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(plaintext.encode('utf-8')) + encryptor.finalize()
+    tag = encryptor.tag
+    
+    # 3. Encrypt the AES key using RSA public key
+    with open(PUBLIC_KEY_PATH, "rb") as f:
+        public_key = serialization.load_pem_public_key(f.read())
+        
+    encrypted_aes_key = public_key.encrypt(
+        aes_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    
+    # 4. Return all parts as base64 string
+    return {
+        "ciphertext": base64.b64encode(ciphertext).decode('utf-8'),
+        "encrypted_key": base64.b64encode(encrypted_aes_key).decode('utf-8'),
+        "nonce": base64.b64encode(nonce).decode('utf-8'),
+        "tag": base64.b64encode(tag).decode('utf-8')
+    }
+
+def decrypt_asymmetric_hybrid(ciphertext_b64: str, encrypted_key_b64: str, nonce_b64: str, tag_b64: str) -> str:
+    """
+    Decrypt asymmetric hybrid encrypted payload.
+    """
+    if not ciphertext_b64 or not encrypted_key_b64:
+        return ""
+    
+    # Check if private key exists
+    if not os.path.exists(PRIVATE_KEY_PATH):
+        print("[SECURITY] Private key does not exist. Decryption failed.", flush=True)
+        return ""
+    
+    try:
+        # Decode base64 parts
+        ciphertext = base64.b64decode(ciphertext_b64.encode('utf-8'))
+        encrypted_aes_key = base64.b64decode(encrypted_key_b64.encode('utf-8'))
+        nonce = base64.b64decode(nonce_b64.encode('utf-8'))
+        tag = base64.b64decode(tag_b64.encode('utf-8'))
+        
+        # 1. Decrypt AES key using RSA private key
+        with open(PRIVATE_KEY_PATH, "rb") as f:
+            private_key = serialization.load_pem_private_key(f.read(), password=None)
+            
+        aes_key = private_key.decrypt(
+            encrypted_aes_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        
+        # 2. Decrypt ciphertext using AES-GCM
+        cipher = Cipher(algorithms.AES(aes_key), modes.GCM(nonce, tag))
+        decryptor = cipher.decryptor()
+        decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
+        
+        return decrypted_bytes.decode('utf-8')
+    except Exception as e:
+        import traceback
+        print(f"[SECURITY] Hybrid decryption failed: {e}", flush=True)
+        traceback.print_exc()
+        return ""
+
+
