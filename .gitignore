@@ -52,4 +52,6 @@ keys/
 *.db-shm
 *.db-wal
 *.wav
+matcha_inference_standalone/
+
 
