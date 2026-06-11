@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-200: #ddd6fe;
+  --color-brand-300: #c084fc;
+  --color-brand-400: #a855f7;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+  --color-brand-800: #5b21b6;
+  --color-brand-900: #4c1d95;
+  --color-brand-950: #2e1065;
+
+  --color-darkBg-DEFAULT: #0b0b14;
+  --color-darkBg-card: #121225;
+  --color-darkBg-border: #1f1f3a;
+  --color-darkBg-hover: #29294e;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-darkBg-DEFAULT);
+    color: var(--color-slate-100);
+    min-height: 100vh;
+    min-height: 100dvh;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior-y: none;
+  }
+
+  /* Prevent iOS zoom on input focus */
+  input, textarea, select {
+    font-size: 16px;
+  }
+}
+
+/* Safe area utilities for notch phones */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Custom scrollbar styling — desktop only */
+@media (min-width: 1024px) {
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0b0b14; }
+  ::-webkit-scrollbar-thumb { background: #1f1f3a; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2d2d55; }
+}
+
+/* Mobile: hide scrollbar but keep scroll */
+@media (max-width: 1023px) {
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+}
+
+/* Custom CSS for reader themes */
+.theme-sepia  { background-color: #f4ecd8 !important; color: #5c4033 !important; }
+.theme-green  { background-color: #dfedd6 !important; color: #2e4a3e !important; }
+.theme-light  { background-color: #ffffff  !important; color: #1a1a1a !important; }
+.theme-dark   { background-color: #0b0b14  !important; color: #cbd5e1 !important; }
+
+/* Audio wave animation */
+@keyframes bounce-wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1.0); }
+}
+.audio-wave-bar { animation: bounce-wave 0.8s ease-in-out infinite; transform-origin: bottom; }
+.audio-wave-bar:nth-child(1) { animation-delay: 0.10s; }
+.audio-wave-bar:nth-child(2) { animation-delay: 0.25s; }
+.audio-wave-bar:nth-child(3) { animation-delay: 0.05s; }
+.audio-wave-bar:nth-child(4) { animation-delay: 0.35s; }
+.audio-wave-bar:nth-child(5) { animation-delay: 0.15s; }
+
+/* AI glow */
+.ai-glow       { box-shadow: 0 0 15px rgba(245, 158, 11, 0.40); }
+.ai-glow:hover { box-shadow: 0 0 25px rgba(245, 158, 11, 0.65); }
+
+/* Fade-in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.animate-fadeIn { animation: fadeIn 0.25s ease forwards; }
+
+/* Slide up (mobile modals / bottom sheet) */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+
+/* Bottom nav active pop */
+@keyframes nav-pop {
+  0%   { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(1);   opacity: 1;   }
+}
+.nav-active { animation: nav-pop 0.18s ease forwards; }

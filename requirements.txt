@@ -15,3 +15,4 @@ colorama>=0.4.6
 gevent>=23.9.1
 Flask-Compress>=1.14
 Flask-Compress
+huggingface_hub>=0.20.0
